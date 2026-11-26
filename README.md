@@ -1,6 +1,6 @@
 # Aeris Core
 
-**Breathe freely.** Independent Rust networking core for Windows x64. Development version 0.1.0. Initialization only: the CLI currently exposes help/version; VPN, DNS, DPI and service operations are not implemented. No network changes are made by the scaffold.
+**Breathe freely.** Independent Rust networking core for Windows x64. Development version 0.1.0. Initialization only: the CLI currently exposes help/version and structural YAML checks; VPN, DNS, DPI and service operations are not implemented. No network changes are made by the scaffold.
 
 [Aeris client](https://github.com/geliopat/Aeris) · [Resources](https://github.com/geliopat/Aeris-Resources) · [Specification](docs/SPECIFICATION.md) · [Roadmap](docs/ROADMAP.md)
 
@@ -13,3 +13,5 @@ cargo test --workspace --locked
 ```
 
 CLI installation layout: place aeris-core.exe in the core root, cli/aeris.cmd in its cli subdirectory; add only the cli directory to PATH, not the GUI directory. Installer registration is not implemented. The project license is pending upstream audit; no third-party code is included here.
+
+Configuration branch: see [implementation status](docs/CONFIG-IMPLEMENTATION.md). `aeris config check FILE` does not establish runtime compatibility or activate anything.

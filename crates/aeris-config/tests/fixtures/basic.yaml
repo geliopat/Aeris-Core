@@ -1,0 +1,28 @@
+# Synthetic Mihomo-style fixture; no real credentials or endpoints.
+mode: rule
+ipv6: true
+mixed-port: 7890
+tun:
+  enable: true
+  stack: rips
+  dns-hijack: [any:53, tcp://any:53]
+dns:
+  enable: true
+  enhanced-mode: fake-ip
+  respect-rules: true
+  nameserver:
+    - "https://resolver.example/dns-query#Москва"
+proxies:
+  - name: Example
+    type: vless
+    server: proxy.example
+    port: 443
+    uuid: "00000000-0000-4000-8000-000000000000"
+    network: xhttp
+proxy-groups:
+  - name: Москва
+    type: select
+    proxies: [Example, DIRECT]
+rules:
+  - DOMAIN,example.org,DIRECT
+  - MATCH,Москва

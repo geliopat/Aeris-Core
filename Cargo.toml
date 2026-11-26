@@ -1,8 +1,9 @@
 [workspace]
-members = ["crates/aeris-core"]
+members = ["crates/aeris-core", "crates/aeris-config"]
 resolver = "3"
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
+publish = false
