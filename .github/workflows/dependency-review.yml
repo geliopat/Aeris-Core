@@ -1,0 +1,23 @@
+name: Rust dependency policy
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: '13 4 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: dependency-policy-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  dependency-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Review locked Rust dependency graph
+        uses: EmbarkStudios/cargo-deny-action@v2.1.4
+        with:
+          arguments: '--locked --all-features'
+          command: check
+          rust-version: stable

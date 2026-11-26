@@ -121,16 +121,12 @@ impl Control {
     }
 
     async fn reserve(&self) -> Result<OwnedSemaphorePermit, Error> {
-        self.run(
-            Operation::Capacity,
-            self.settings.capacity_timeout,
-            async {
-                Arc::clone(&self.capacity)
-                    .acquire_owned()
-                    .await
-                    .map_err(|_| Error::Cancelled)
-            },
-        )
+        self.run(Operation::Capacity, self.settings.capacity_timeout, async {
+            Arc::clone(&self.capacity)
+                .acquire_owned()
+                .await
+                .map_err(|_| Error::Cancelled)
+        })
         .await
     }
 }

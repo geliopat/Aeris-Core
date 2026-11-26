@@ -81,10 +81,7 @@ async fn udp_round_trip_and_buffer_limits() {
     let sender = transport.bind_udp(loopback()).await.expect("sender");
     let receiver = transport.bind_udp(loopback()).await.expect("receiver");
     let address = receiver.local_addr().expect("address");
-    assert_eq!(
-        sender.send_to(b"hello", address).await.expect("send"),
-        5
-    );
+    assert_eq!(sender.send_to(b"hello", address).await.expect("send"), 5);
     let mut buffer = vec![0; UDP_RECEIVE_BUFFER];
     let (size, from) = receiver.recv_from(&mut buffer).await.expect("receive");
     assert_eq!(&buffer[..size], b"hello");
@@ -147,9 +144,10 @@ async fn stop_interrupts_receive_and_waiting_capacity() {
         let mut buffer = vec![0; UDP_RECEIVE_BUFFER];
         receiver.recv_from(&mut buffer).await
     });
-    let capacity_task = tokio::spawn(async move {
-        matches!(waiting.bind_udp(loopback()).await, Err(Error::Cancelled))
-    });
+    let capacity_task =
+        tokio::spawn(
+            async move { matches!(waiting.bind_udp(loopback()).await, Err(Error::Cancelled)) },
+        );
     tokio::task::yield_now().await;
     transport.shutdown();
     assert_eq!(

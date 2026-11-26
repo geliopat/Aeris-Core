@@ -3,6 +3,7 @@ name = "aeris-config"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+publish.workspace = true
 
 [dependencies]
 serde-saphyr = { version = "=2.2.0", default-features = false, features = ["deserialize"] }
