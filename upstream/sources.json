@@ -1,0 +1,82 @@
+[
+  {
+    "repository": "XTLS/Xray-core",
+    "ref": "main",
+    "baseline": "b56ffef338c8096c7dbe78eaa76f1cb05a328d6f",
+    "interval_hours": 6,
+    "purpose": "XHTTP, XUDP, REALITY, Vision",
+    "license_metadata": "MPL-2.0"
+  },
+  {
+    "repository": "pluralplay/FlClashX",
+    "ref": "main",
+    "baseline": "a9bbb66f6aec3e47359819c93976148a1d270e23",
+    "interval_hours": 24,
+    "purpose": "Authoritative Mihomo assembly / UI reference",
+    "license_metadata": "GPL-3.0"
+  },
+  {
+    "repository": "MetaCubeX/mipstack",
+    "ref": "master",
+    "baseline": "9a80a07eaeb9404d5bf416288e989ba7f947c899",
+    "interval_hours": 24,
+    "purpose": "RIPS reference; assembly pin 9a80a07eaeb9404d5bf416288e989ba7f947c899",
+    "license_metadata": "MPL-2.0"
+  },
+  {
+    "repository": "bol-van/zapret2",
+    "ref": "master",
+    "baseline": "93fbe9af8110107f44b70dba1ee956a0902f65b6",
+    "interval_hours": 6,
+    "purpose": "DPI and Lua semantics",
+    "license_metadata": "unverified"
+  },
+  {
+    "repository": "Flowseal/zapret-discord-youtube",
+    "ref": "main",
+    "baseline": "ffce9179b2b1f2aeb961f4d17274ada3b6d6bea5",
+    "interval_hours": 6,
+    "purpose": "Strategy/list reference",
+    "license_metadata": "NOASSERTION"
+  },
+  {
+    "repository": "mqclass/zapret2-gui",
+    "ref": "main",
+    "baseline": "8dd17fcbcca405a50f497a6e2346ca263901d775",
+    "interval_hours": 24,
+    "purpose": "Strategy catalog",
+    "license_metadata": "MIT"
+  },
+  {
+    "repository": "refraction-networking/utls",
+    "ref": "master",
+    "baseline": "360383f893fbe954ff12a701b87295406abbc156",
+    "interval_hours": 24,
+    "purpose": "TLS fingerprint reference",
+    "license_metadata": "BSD-3-Clause"
+  },
+  {
+    "repository": "rustls/rustls",
+    "ref": "main",
+    "baseline": "e11f98090bee85e6cb2ca03b11819fd145668795",
+    "interval_hours": 24,
+    "purpose": "TLS library",
+    "license_metadata": "NOASSERTION"
+  },
+  {
+    "repository": "WireGuard/wintun",
+    "ref": "master",
+    "baseline": "ec0a6b98456fe1ba52567bb2add4bbf5f64315a1",
+    "interval_hours": 24,
+    "purpose": "Driver",
+    "license_metadata": "NOASSERTION"
+  },
+  {
+    "repository": "basil00/WinDivert",
+    "ref": "master",
+    "baseline": "4f311999b0d93b88f09450bb56ba9cc8cb028d9c",
+    "interval_hours": 24,
+    "purpose": "Driver",
+    "license_metadata": "NOASSERTION"
+  }
+]

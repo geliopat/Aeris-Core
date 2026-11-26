@@ -1,0 +1,23 @@
+name: Upstream review report
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+    - cron: '43 3 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare heads with reviewed baselines
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INTERVAL: ${{ github.event_name == 'workflow_dispatch' && 'all' || (github.event.schedule == '43 3 * * *' && '24' || '6') }}
+        run: python3 tools/check_upstream.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: upstream-report
+          path: upstream-report.md
