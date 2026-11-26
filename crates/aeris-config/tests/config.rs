@@ -84,6 +84,91 @@ fn reports_unchecked_fields_and_unreachable_rules() {
 }
 
 #[test]
+fn accepts_mihomo_rule_options_without_rewriting_rules() {
+    let source = concat!(
+        "rule-providers: {example: {}}\nrules:\n",
+        "  - IP-CIDR, 192.0.2.0/24, DIRECT, no-resolve\n",
+        "  - ip-cidr6,2001:db8::/32,DIRECT,src,no-resolve\n",
+        "  - GEOIP,US,DIRECT,src\n",
+        "  - IP-ASN,64496,DIRECT,no-resolve,src\n",
+        "  - RULE-SET,example,DIRECT,no-resolve\n",
+        "  - match,DIRECT",
+    );
+    let document = parse(source);
+    let user = UserRules::parse("['IP-CIDR,198.51.100.0/24,REJECT,src']").expect("user rules");
+    let report = document
+        .check_with_user_rules(Some(&user))
+        .expect("structural rule check");
+    assert_eq!(report.unchecked_rule_matchers, 0);
+    assert_eq!(document.original(), source);
+    assert_eq!(
+        document.preview_rules(&user).nth(2),
+        Some("ip-cidr6,2001:db8::/32,DIRECT,src,no-resolve")
+    );
+}
+
+#[test]
+fn rejects_unrecognized_or_misplaced_options_for_checked_rules() {
+    for rule in [
+        "DOMAIN,example.org,DIRECT,unexpected,garbage",
+        "domain,example.org,DIRECT,no-resolve",
+        "PROCESS-NAME,process.exe,DIRECT,src",
+        "GEOSITE,example,DIRECT,no-resolve",
+        "IP-CIDR,192.0.2.0/24,DIRECT,",
+        "IP-ASN,64496,DIRECT,no-resolve,unknown",
+        "IP-CIDR6,2001:db8::/32,DIRECT,NO-RESOLVE",
+        "IP-CIDR,192.0.2.0/24,DIRECT,\tno-resolve",
+        "IP-CIDR,192.0.2.0/24,DIRECT,\u{00a0}src",
+        "RULE-SET,example,DIRECT,unknown",
+    ] {
+        let source = format!("rule-providers: {{example: {{}}}}\nrules: ['{rule}']");
+        let expected = Error::Shape("rules[].options".to_owned());
+        assert_eq!(parse(&source).check(), Err(expected.clone()), "{rule}");
+        let user = UserRules::parse(&format!("['{rule}']")).expect("user rules");
+        let document = parse("rule-providers: {example: {}}\nrules: ['MATCH,DIRECT']");
+        assert_eq!(document.check_with_user_rules(Some(&user)), Err(expected));
+    }
+}
+
+#[test]
+fn cidr_aliases_accept_both_address_families_and_preserve_host_bits() {
+    let source = concat!(
+        "rules:\n",
+        "  - IP-CIDR6,192.0.2.7/24,DIRECT\n",
+        "  - IP-CIDR,2001:db8::7/32,DIRECT\n",
+        "  - IP-CIDR,0.0.0.0/0,DIRECT\n",
+        "  - IP-CIDR6,::ffff:192.0.2.7/128,DIRECT",
+    );
+    let document = parse(source);
+    let report = document.check().expect("structural CIDR check");
+    assert_eq!(report.unchecked_rule_matchers, 0);
+    assert_eq!(document.original(), source);
+}
+
+#[test]
+fn rejects_invalid_ip_prefixes_without_echoing_payload() {
+    for rule in [
+        "IP-CIDR,secret-value/24,DIRECT",
+        "IP-CIDR,192.0.2.1,DIRECT",
+        "IP-CIDR,192.0.2.1/33,DIRECT",
+        "IP-CIDR6,2001:db8::1/129,DIRECT",
+        "IP-CIDR6,fe80::1%eth0/64,DIRECT",
+        "IP-CIDR,192.0.2.1/024,DIRECT",
+        "IP-CIDR,192.0.2.1/+24,DIRECT",
+        "IP-CIDR6,::/-1,DIRECT",
+        "IP-CIDR,\t192.0.2.1/24,DIRECT",
+        "IP-CIDR6,\u{00a0}2001:db8::/32,DIRECT",
+    ] {
+        let source = format!("rules: ['{rule}']");
+        let expected = Error::Shape("rules[].IP-CIDR".to_owned());
+        assert_eq!(parse(&source).check(), Err(expected.clone()), "{rule}");
+        let user = UserRules::parse(&format!("['{rule}']")).expect("user rules");
+        let document = parse("rules: ['MATCH,DIRECT']");
+        assert_eq!(document.check_with_user_rules(Some(&user)), Err(expected));
+    }
+}
+
+#[test]
 fn user_rules_precede_provider_without_mutation() {
     let source = "rules: ['DOMAIN,example.org,DIRECT', 'MATCH,DIRECT']";
     let document = parse(source);

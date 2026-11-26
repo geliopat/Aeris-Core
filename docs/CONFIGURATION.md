@@ -42,7 +42,7 @@ rules:
   - MATCH,Example
 ```
 
-Пример использует зарезервированный домен `.example`, не действующий резолвер. Политики Aero-расширений, IPv6 и DNS должны пройти тесты; значения по умолчанию не угадывать по этому примеру.
+Пример использует зарезервированный домен `.example`, не действующий резолвер. Политики Aeris-расширений, IPv6 и DNS должны пройти тесты; значения по умолчанию не угадывать по этому примеру.
 
 ## 3. Протоколы
 
@@ -60,13 +60,13 @@ System/RIPS/Mixed/Auto, Mixed TCP System + UDP RIPS, RIPS default после п�
 
 ## 6. Маршрутизация
 
-Правила по domain/IP/ASN/process/port/protocol/interface и логические комбинации. Поддержать согласованное подмножество Mihomo: DOMAIN, DOMAIN-SUFFIX, DOMAIN-KEYWORD, IP-CIDR, IP-CIDR6, GEOIP, GEOSITE, IP-ASN, PROCESS-NAME, PROCESS-PATH, RULE-SET, AND/OR/NOT, MATCH, sub-rules и другие используемые проверенные типы. Синтаксис новых matcher согласовать. DIRECT, REJECT, REJECT-DROP, PASS согласно реальной семантике эталона; явные Aeris-маршруты ZAPRET и DIRECT-NO-ZAPRET. ZAPRET при выключенном DPI — DIRECT согласно согласованной политике, кроме запретов Kill Switch/REJECT. DPI не изменяет proxy-транспорт. `dialer-proxy` для цепочек.
+Правила по domain/IP/ASN/process/port/protocol/interface и логические комбинации. Поддержать согласованное подмножество Mihomo: DOMAIN, DOMAIN-SUFFIX, DOMAIN-KEYWORD, IP-CIDR, IP-CIDR6, GEOIP, GEOSITE, IP-ASN, PROCESS-NAME, PROCESS-PATH, RULE-SET, AND/OR/NOT, MATCH, sub-rules и другие используемые проверенные типы. Синтаксис новых matcher согласовать. DIRECT, REJECT, REJECT-DROP, PASS согласно реальной семантике эталона; маршрут через PROXY/именованный исходящий узел или группу. PROXY как литеральное зарезервированное имя не вводить без проверки эталона/согласования; явные Aeris-маршруты ZAPRET и DIRECT-NO-ZAPRET. ZAPRET при выключенном DPI — DIRECT согласно согласованной политике, кроме запретов Kill Switch/REJECT. DPI не изменяет proxy-транспорт. `dialer-proxy` для цепочек.
 
 Группы select/url-test/fallback/load-balance/smart/adaptive. Тест URL/interval/lazy, дедуп проверок, реальные измерения, sticky/weights/least latency/least connections. Не объявлять данные об удалённой нагрузке без источника. Геоданные и rule providers MRS/MMDB/YAML/text в поддерживаемых вариантах; update/rollback/validation. Прокси-группы с hidden, description, icon, порядок и выбранные элементы как в поддерживаемом формате. Kill Switch off/proxy-only(default)/strict/persistent; exact schema TBD.
 
 ## 7. Zapret2 и клиентские настройки
 
-Параметры самого DPI — в конфигурации ядра, точная схема TBD; не дублировать HTTP-заголовками. Режимы DIRECT-only/list-based, STRICT SPLIT/FULL BYPASS для совместимых стратегий, standalone/custom, исключения, отдельная DNS-политика, параметры таймаутов/портов, указание стратегий и списков с источниками. Не запускать произвольные BAT/CMD. Актуальные ресурсы могут обновляться отдельно после проверки.
+Параметры самого DPI — в конфигурации ядра, точная схема TBD; не дублировать HTTP-заголовками. Режимы DIRECT-only/list-based, STRICT SPLIT/FULL BYPASS для совместимых стратегий, standalone/custom, исключения. STRICT SPLIT ограничивает обработку подходящим трафиком согласованных списков (YouTube/Discord/Google для соответствующего сценария); FULL BYPASS применяет совместимую стратегию на её перехватываемых портах, но не отменяет границу VPN-транспорта, DIRECT-NO-ZAPRET, REJECT и Kill Switch. Ultimate/custom могут определять собственные условия; UI явно показывает ограничения режима, отдельная DNS-политика, параметры таймаутов/портов, указание стратегий и списков с источниками. Не запускать произвольные BAT/CMD. Актуальные ресурсы могут обновляться отдельно после проверки.
 
 Настройки GUI (тема, анимации, горячие клавиши, локализация, уведомления, автозапуск) отдельно от YAML, интерфейсный режим исключительно из профиля. Пользователь не редактирует подписку. Нет глобального экспорта/импорта всех настроек; внутренние rollback snapshots не являются пользовательской функцией бэкапа.
 
