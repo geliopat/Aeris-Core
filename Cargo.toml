@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/aeris-core", "crates/aeris-config"]
+members = ["crates/aeris-core", "crates/aeris-config", "crates/aeris-transport"]
 resolver = "3"
 
 [workspace.package]
