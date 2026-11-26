@@ -3,3 +3,6 @@ name = "aeris-core"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+
+[dependencies]
+aeris-config = { path = "../aeris-config" }
