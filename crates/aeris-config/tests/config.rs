@@ -1,4 +1,7 @@
-use aeris_config::{ConfigDocument, Error, MAX_INPUT_BYTES, UserRule, UserRules};
+use aeris_config::{
+    ConfigDocument, Error, MAX_INPUT_BYTES, ProfileStore, StoreError, UserRule, UserRules,
+};
+use std::sync::Arc;
 
 fn parse(source: &str) -> ConfigDocument {
     ConfigDocument::parse(source.to_owned()).expect("parse fixture")
@@ -48,6 +51,71 @@ fn rejects_bad_types_and_ports() {
     ] {
         assert!(parse(source).check().is_err());
     }
+}
+
+#[test]
+fn checks_synthetic_group_health_profile_and_preserves_source() {
+    let source = include_str!("fixtures/group-health.yaml");
+    let document = parse(source);
+    let report = document.check().expect("health field shape and references");
+    assert_eq!(report.unchecked_top_level_fields, 0);
+    assert_eq!(report.unchecked_rule_matchers, 0);
+    assert_eq!(document.original().as_bytes(), source.as_bytes());
+    assert_eq!(
+        document
+            .preview_rules(&UserRules::default())
+            .collect::<Vec<_>>(),
+        ["DOMAIN,service.example,Selected", "MATCH,Measured"]
+    );
+}
+
+#[test]
+fn rejects_invalid_group_health_shapes_without_echoing_values() {
+    for (field, value) in [
+        ("url", "['https://secret.example/probe?token=fixture']"),
+        ("interval", "'300'"),
+        ("interval", "-1"),
+        ("interval", "9223372036854775808"),
+        ("timeout", "true"),
+        ("timeout", "0.5"),
+        ("timeout", "-1"),
+        ("lazy", "'false'"),
+        ("tolerance", "-1"),
+        ("tolerance", "65536"),
+        ("tolerance", "'50'"),
+    ] {
+        let source = format!(
+            "proxy-groups: [{{name: Measured, type: url-test, proxies: [DIRECT], {field}: {value}}}]"
+        );
+        let error = parse(&source).check().expect_err("invalid health field");
+        assert_eq!(error, Error::Shape(format!("proxy-groups[].{field}")));
+        assert_eq!(
+            error.to_string(),
+            format!("invalid structure at proxy-groups[].{field}")
+        );
+    }
+}
+
+#[test]
+fn health_fields_keep_zero_and_empty_values_and_scope_tolerance() {
+    let source = "proxy-groups:\n  - {name: One, type: url-test, proxies: [DIRECT], url: '', interval: 0, timeout: 0, lazy: false, tolerance: 0}\n  - {name: Two, type: url-test, proxies: [One], tolerance: 65535}\n  - {name: Three, type: load-balance, proxies: [Two], tolerance: [opaque], strategy: round-robin}";
+    parse(source).check().expect("supported boundary shapes");
+}
+
+#[test]
+fn invalid_group_health_refresh_preserves_the_previous_snapshot() {
+    let source = include_str!("fixtures/group-health.yaml");
+    let store = ProfileStore::new(parse(source), UserRules::default()).expect("profile store");
+    let prior = store.current().expect("current snapshot");
+    let invalid = source.replace("timeout: 4200", "timeout: invalid");
+    assert!(matches!(
+        store.refresh_provider(prior.generation(), parse(&invalid)),
+        Err(StoreError::Invalid(Error::Shape(field))) if field == "proxy-groups[].timeout"
+    ));
+    assert!(Arc::ptr_eq(
+        &prior,
+        &store.current().expect("preserved snapshot")
+    ));
 }
 
 #[test]

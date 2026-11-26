@@ -1,0 +1,26 @@
+# Synthetic profile for checking group health fields without network use.
+proxies:
+  - name: SampleEdge
+    type: socks5
+    server: edge.example
+    port: 1080
+proxy-providers:
+  SamplePool:
+    type: http
+    url: https://catalog.example/proxies.yaml
+proxy-groups:
+  - name: Selected
+    type: select
+    proxies: [Measured, DIRECT]
+  - name: Measured
+    type: url-test
+    proxies: [SampleEdge]
+    use: [SamplePool]
+    url: https://health.example/status
+    interval: 180
+    timeout: 4200
+    lazy: true
+    tolerance: 45
+rules:
+  - DOMAIN,service.example,Selected
+  - MATCH,Measured
