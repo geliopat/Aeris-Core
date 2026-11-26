@@ -10,13 +10,13 @@ jobs:
   report:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
       - name: Compare heads with reviewed baselines
         env:
           GH_TOKEN: ${{ github.token }}
           INTERVAL: ${{ github.event_name == 'workflow_dispatch' && 'all' || (github.event.schedule == '43 3 * * *' && '24' || '6') }}
         run: python3 tools/check_upstream.py
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         if: always()
         with:
           name: upstream-report
