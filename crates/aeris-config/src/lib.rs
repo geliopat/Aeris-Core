@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt;
 use std::fs::File;
 use std::io::Read;
+use std::net::IpAddr;
 use std::path::Path;
 
 mod snapshot;
@@ -82,7 +83,9 @@ pub struct ConfigDocument {
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct CheckReport {
+    /// Root keys with no structural checks. Checked sections may contain unchecked fields.
     pub unchecked_top_level_fields: usize,
+    /// Rules whose matcher kind is outside the structural checker.
     pub unchecked_rule_matchers: usize,
     pub user_rules_after_match: usize,
     pub rules_after_match: usize,
@@ -357,10 +360,10 @@ fn check_rule(
     report: &mut CheckReport,
     matched: &mut bool,
 ) -> Result<(), Error> {
-    let mut parts = rule.split(',').map(str::trim);
-    let kind = parts.next();
-    match kind {
-        Some("MATCH") => {
+    let mut parts = rule.split(',').map(|part| part.trim_matches(' '));
+    let kind = parts.next().unwrap_or_default().to_ascii_uppercase();
+    match kind.as_str() {
+        "MATCH" => {
             let target = parts.next().ok_or_else(|| shape("rules[].MATCH"))?;
             if target.is_empty() || parts.next().is_some() {
                 return Err(shape("rules[].MATCH"));
@@ -368,21 +371,48 @@ fn check_rule(
             check_target(graph, target)?;
             *matched = true;
         }
-        Some(
-            "DOMAIN" | "DOMAIN-SUFFIX" | "DOMAIN-KEYWORD" | "IP-CIDR" | "IP-CIDR6" | "GEOIP"
-            | "GEOSITE" | "IP-ASN" | "PROCESS-NAME" | "PROCESS-PATH" | "RULE-SET",
-        ) => {
+        "DOMAIN" | "DOMAIN-SUFFIX" | "DOMAIN-KEYWORD" | "IP-CIDR" | "IP-CIDR6" | "GEOIP"
+        | "GEOSITE" | "IP-ASN" | "PROCESS-NAME" | "PROCESS-PATH" | "RULE-SET" => {
             let matcher = parts.next().ok_or_else(|| shape("rules[]"))?;
             let target = parts.next().ok_or_else(|| shape("rules[]"))?;
             if matcher.is_empty() || target.is_empty() {
                 return Err(shape("rules[]"));
             }
-            if kind == Some("RULE-SET") && !rule_providers.contains(matcher) {
+            if matches!(kind.as_str(), "IP-CIDR" | "IP-CIDR6") {
+                check_ip_prefix(matcher)?;
+            }
+            let accepts_ip_options = matches!(
+                kind.as_str(),
+                "IP-CIDR" | "IP-CIDR6" | "GEOIP" | "IP-ASN" | "RULE-SET"
+            );
+            for option in parts {
+                if !accepts_ip_options || !matches!(option, "no-resolve" | "src") {
+                    return Err(shape("rules[].options"));
+                }
+            }
+            if kind == "RULE-SET" && !rule_providers.contains(matcher) {
                 return Err(Error::Reference("rules[].RULE-SET".to_owned()));
             }
             check_target(graph, target)?;
         }
         _ => report.unchecked_rule_matchers += 1,
+    }
+    Ok(())
+}
+
+fn check_ip_prefix(matcher: &str) -> Result<(), Error> {
+    let (address, length) = matcher
+        .rsplit_once('/')
+        .ok_or_else(|| shape("rules[].IP-CIDR"))?;
+    let address = address
+        .parse::<IpAddr>()
+        .map_err(|_| shape("rules[].IP-CIDR"))?;
+    let max_length = if address.is_ipv4() { 32 } else { 128 };
+    if length.starts_with('+')
+        || (length.len() > 1 && length.starts_with('0'))
+        || !length.parse::<u8>().is_ok_and(|bits| bits <= max_length)
+    {
+        return Err(shape("rules[].IP-CIDR"));
     }
     Ok(())
 }
