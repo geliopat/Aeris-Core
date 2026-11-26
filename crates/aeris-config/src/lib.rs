@@ -12,6 +12,7 @@ mod snapshot;
 pub use snapshot::{ConfigSnapshot, ProfileStore, StoreError};
 
 pub const MAX_INPUT_BYTES: usize = 16 * 1024 * 1024;
+const MAX_DECODED_SCALAR_BYTES: usize = 32 * 1024 * 1024;
 const BUILTINS: &[&str] = &[
     "DIRECT",
     "REJECT",
@@ -104,7 +105,7 @@ fn decode(text: &str) -> Result<Value, Error> {
     budget.max_documents = 1;
     budget.max_depth = 48;
     budget.flow_nesting_limit = 48;
-    budget.max_total_scalar_bytes = 32 * 1024 * 1024;
+    budget.max_total_scalar_bytes = MAX_DECODED_SCALAR_BYTES;
     let mut options = serde_saphyr::Options::default();
     options.budget = Some(budget);
     options.reject_unsupported_tags = true;
@@ -302,7 +303,7 @@ impl ConfigDocument {
         check_graph(&graph)?;
         let mut matched = false;
         if let Some(user) = user {
-            for rule in &user.rules {
+            for rule in user.enabled_texts() {
                 if matched {
                     report.user_rules_after_match += 1;
                 }
@@ -340,9 +341,9 @@ impl ConfigDocument {
         Ok(report)
     }
 
-    /// User rules stay separate; this only previews order and never applies routing.
+    /// Previews enabled user rules followed by provider rules, without applying routing.
     pub fn preview_rules<'a>(&'a self, user: &'a UserRules) -> impl Iterator<Item = &'a str> {
-        user.rules.iter().map(String::as_str).chain(
+        user.enabled_texts().chain(
             self.parsed
                 .get("rules")
                 .and_then(Value::as_array)
@@ -486,23 +487,83 @@ fn check_graph(graph: &BTreeMap<&str, Vec<&str>>) -> Result<(), Error> {
     Ok(())
 }
 
-/// Separate ordered user-rule document, never a provider-YAML override.
+/// A user-owned rule and its participation in routing order.
+#[derive(Clone)]
+pub struct UserRule {
+    text: String,
+    enabled: bool,
+}
+
+impl UserRule {
+    /// Checks the entry's byte limit and shape. Enabled rules undergo profile validation.
+    pub fn new(text: String, enabled: bool) -> Result<Self, Error> {
+        if text.len() > MAX_INPUT_BYTES {
+            return Err(Error::TooLarge);
+        }
+        Self::from_text(text, enabled)
+    }
+
+    fn from_text(text: String, enabled: bool) -> Result<Self, Error> {
+        if !text.contains(',') {
+            return Err(shape("user-rules[]"));
+        }
+        Ok(Self { text, enabled })
+    }
+
+    /// Original rule text for display and editing.
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+
+    /// Whether the rule participates in validation and the effective order.
+    pub fn enabled(&self) -> bool {
+        self.enabled
+    }
+}
+
+/// Ordered user-owned rules stored separately from provider configuration.
 #[derive(Default)]
 pub struct UserRules {
-    rules: Vec<String>,
+    entries: Vec<UserRule>,
 }
 
 impl UserRules {
+    /// Loads the existing YAML sequence of strings with all entries enabled.
     pub fn parse(source: &str) -> Result<Self, Error> {
         let value = decode(source)?;
-        let mut rules = Vec::new();
-        for item in sequence(&value, "user-rules")? {
-            let rule = nonempty(item, "user-rules[]")?;
-            if !rule.contains(',') {
-                return Err(shape("user-rules[]"));
-            }
-            rules.push(rule.to_owned());
+        let entries = sequence(&value, "user-rules")?
+            .iter()
+            .map(|item| UserRule::from_text(nonempty(item, "user-rules[]")?.to_owned(), true))
+            .collect::<Result<_, _>>()?;
+        Ok(Self { entries })
+    }
+
+    /// Builds an ordered set, applying the input, decoded-scalar, and event limits.
+    /// Disabled rules count toward the limits because the profile retains them for editing.
+    pub fn from_entries(entries: Vec<UserRule>) -> Result<Self, Error> {
+        if entries.len() > serde_saphyr::Budget::default().max_events {
+            return Err(Error::TooLarge);
         }
-        Ok(Self { rules })
+        let mut remaining = MAX_DECODED_SCALAR_BYTES;
+        for entry in &entries {
+            let size = entry.text.len();
+            if size > MAX_INPUT_BYTES {
+                return Err(Error::TooLarge);
+            }
+            remaining = remaining.checked_sub(size).ok_or(Error::TooLarge)?;
+        }
+        Ok(Self { entries })
+    }
+
+    /// Returns all user entries in order, including disabled ones.
+    pub fn entries(&self) -> &[UserRule] {
+        &self.entries
+    }
+
+    fn enabled_texts(&self) -> impl Iterator<Item = &str> {
+        self.entries
+            .iter()
+            .filter(|entry| entry.enabled())
+            .map(UserRule::text)
     }
 }

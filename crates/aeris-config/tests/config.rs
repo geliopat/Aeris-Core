@@ -1,4 +1,4 @@
-use aeris_config::{ConfigDocument, Error, MAX_INPUT_BYTES, UserRules};
+use aeris_config::{ConfigDocument, Error, MAX_INPUT_BYTES, UserRule, UserRules};
 
 fn parse(source: &str) -> ConfigDocument {
     ConfigDocument::parse(source.to_owned()).expect("parse fixture")
@@ -183,6 +183,100 @@ fn user_rules_precede_provider_without_mutation() {
         ]
     );
     assert_eq!(document.original(), source);
+}
+
+#[test]
+fn disabled_user_rules_do_not_affect_validation_or_order() {
+    let document = parse("rules: ['DOMAIN,provider.example,DIRECT', 'MATCH,DIRECT']");
+    let user = UserRules::from_entries(vec![
+        UserRule::new("MATCH,DIRECT".to_owned(), false).expect("entry"),
+        UserRule::new("DOMAIN,user.example,REJECT".to_owned(), true).expect("entry"),
+        UserRule::new("DOMAIN,disabled.example,Unknown".to_owned(), false).expect("entry"),
+        UserRule::new(
+            "AND,((DOMAIN,unchecked.example),(NETWORK,TCP)),DIRECT".to_owned(),
+            false,
+        )
+        .expect("entry"),
+    ])
+    .expect("user rules");
+    let report = document
+        .check_with_user_rules(Some(&user))
+        .expect("structural check");
+    assert_eq!(report.user_rules_after_match, 0);
+    assert_eq!(report.rules_after_match, 0);
+    assert_eq!(report.unchecked_rule_matchers, 0);
+    assert_eq!(
+        document.preview_rules(&user).collect::<Vec<_>>(),
+        [
+            "DOMAIN,user.example,REJECT",
+            "DOMAIN,provider.example,DIRECT",
+            "MATCH,DIRECT",
+        ]
+    );
+    assert_eq!(user.entries().len(), 4);
+    assert!(!user.entries()[0].enabled());
+    assert_eq!(user.entries()[0].text(), "MATCH,DIRECT");
+}
+
+#[test]
+fn parses_legacy_user_rules_as_enabled_without_accepting_a_new_yaml_format() {
+    let user =
+        UserRules::parse("['DOMAIN,user.example,DIRECT', 'MATCH,DIRECT']").expect("legacy rules");
+    assert!(user.entries().iter().all(UserRule::enabled));
+    assert!(UserRules::parse("[{text: 'MATCH,DIRECT', enabled: false}]").is_err());
+    assert!(UserRules::parse("['missing-separator']").is_err());
+    assert!(UserRule::new("missing-separator".to_owned(), false).is_err());
+}
+
+#[test]
+fn typed_user_rules_enforce_entry_and_aggregate_byte_limits() {
+    fn text(bytes: usize) -> String {
+        let mut text = "s".repeat(bytes - 1);
+        text.push(',');
+        text
+    }
+
+    assert!(matches!(
+        UserRule::new(text(MAX_INPUT_BYTES + 1), false),
+        Err(Error::TooLarge)
+    ));
+    let entry = UserRule::new(text(MAX_INPUT_BYTES), false).expect("entry at byte limit");
+    let exact = UserRules::from_entries(vec![entry.clone(), entry.clone()]);
+    assert!(exact.is_ok());
+    drop(exact);
+    let extra = UserRule::new(",".to_owned(), false).expect("disabled entry");
+    assert!(matches!(
+        UserRules::from_entries(vec![entry.clone(), entry, extra]),
+        Err(Error::TooLarge)
+    ));
+}
+
+#[test]
+fn typed_user_rules_enforce_entry_count_without_excluding_disabled_rules() {
+    let max_entries = serde_saphyr::Budget::default().max_events;
+    let disabled = UserRule::new("MATCH,DIRECT".to_owned(), false).expect("disabled entry");
+    assert!(UserRules::from_entries(vec![disabled.clone(); max_entries]).is_ok());
+    assert!(matches!(
+        UserRules::from_entries(vec![disabled; max_entries + 1]),
+        Err(Error::TooLarge)
+    ));
+}
+
+#[test]
+fn legacy_user_rules_keep_the_existing_decoded_scalar_budget_for_aliases() {
+    let suffix = "s".repeat(MAX_INPUT_BYTES / 2);
+    let source = format!("[&rule 'DOMAIN,{suffix},DIRECT', *rule, *rule]");
+    assert!(source.len() < MAX_INPUT_BYTES);
+    let user = UserRules::parse(&source).expect("aliases fit the decoded scalar budget");
+    assert_eq!(user.entries().len(), 3);
+    assert!(user.entries().iter().all(UserRule::enabled));
+    assert!(
+        user.entries()
+            .iter()
+            .map(|entry| entry.text().len())
+            .sum::<usize>()
+            > MAX_INPUT_BYTES
+    );
 }
 
 #[test]

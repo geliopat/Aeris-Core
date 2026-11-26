@@ -23,6 +23,12 @@ impl ConfigSnapshot {
         &self.report
     }
 
+    /// User-owned rules including disabled entries, in their editor order.
+    pub fn user_rules(&self) -> &UserRules {
+        &self.user_rules
+    }
+
+    /// The enabled user rules followed by the provider rules.
     pub fn rules(&self) -> impl Iterator<Item = &str> {
         self.document.preview_rules(&self.user_rules)
     }
@@ -65,7 +71,7 @@ pub struct ProfileStore {
 
 impl ProfileStore {
     pub fn new(document: ConfigDocument, user_rules: UserRules) -> Result<Self, StoreError> {
-        let current = Self::candidate(1, document, user_rules)?;
+        let current = Self::candidate(1, Arc::new(document), Arc::new(user_rules))?;
         Ok(Self {
             state: RwLock::new(State {
                 current,
@@ -76,16 +82,16 @@ impl ProfileStore {
 
     fn candidate(
         generation: u64,
-        document: ConfigDocument,
-        user_rules: UserRules,
+        document: Arc<ConfigDocument>,
+        user_rules: Arc<UserRules>,
     ) -> Result<Arc<ConfigSnapshot>, StoreError> {
         let report = document
             .check_with_user_rules(Some(&user_rules))
             .map_err(StoreError::Invalid)?;
         Ok(Arc::new(ConfigSnapshot {
             generation,
-            document: Arc::new(document),
-            user_rules: Arc::new(user_rules),
+            document,
+            user_rules,
             report: Arc::new(report),
         }))
     }
@@ -95,11 +101,61 @@ impl ProfileStore {
         Ok(Arc::clone(&state.current))
     }
 
+    /// Atomically replaces both the provider document and the user rules.
     pub fn replace(
         &self,
         expected_generation: u64,
         document: ConfigDocument,
         user_rules: UserRules,
+    ) -> Result<Arc<ConfigSnapshot>, StoreError> {
+        self.publish(
+            expected_generation,
+            Arc::new(document),
+            Arc::new(user_rules),
+        )
+    }
+
+    /// Validates and publishes user edits against the current provider document.
+    pub fn update_user_rules(
+        &self,
+        expected_generation: u64,
+        user_rules: UserRules,
+    ) -> Result<Arc<ConfigSnapshot>, StoreError> {
+        let current = self.current_at(expected_generation)?;
+        self.publish(
+            expected_generation,
+            Arc::clone(&current.document),
+            Arc::new(user_rules),
+        )
+    }
+
+    /// Refreshes the provider document while retaining and validating current user rules.
+    pub fn refresh_provider(
+        &self,
+        expected_generation: u64,
+        document: ConfigDocument,
+    ) -> Result<Arc<ConfigSnapshot>, StoreError> {
+        let current = self.current_at(expected_generation)?;
+        self.publish(
+            expected_generation,
+            Arc::new(document),
+            Arc::clone(&current.user_rules),
+        )
+    }
+
+    fn current_at(&self, expected_generation: u64) -> Result<Arc<ConfigSnapshot>, StoreError> {
+        let current = self.current()?;
+        if current.generation != expected_generation {
+            return Err(StoreError::Conflict);
+        }
+        Ok(current)
+    }
+
+    fn publish(
+        &self,
+        expected_generation: u64,
+        document: Arc<ConfigDocument>,
+        user_rules: Arc<UserRules>,
     ) -> Result<Arc<ConfigSnapshot>, StoreError> {
         let generation = expected_generation
             .checked_add(1)
