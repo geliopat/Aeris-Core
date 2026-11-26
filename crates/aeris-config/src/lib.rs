@@ -176,6 +176,36 @@ fn port(value: &Value, path: &str, allow_zero: bool) -> Result<(), Error> {
     Ok(())
 }
 
+fn check_group_health(group: &Map<String, Value>, kind: &str) -> Result<(), Error> {
+    if group.get("url").is_some_and(|value| !value.is_string()) {
+        return Err(shape("proxy-groups[].url"));
+    }
+    for (field, path) in [
+        ("interval", "proxy-groups[].interval"),
+        ("timeout", "proxy-groups[].timeout"),
+    ] {
+        if group
+            .get(field)
+            .is_some_and(|value| value.as_i64().is_none_or(|number| number < 0))
+        {
+            return Err(shape(path));
+        }
+    }
+    if group.get("lazy").is_some_and(|value| !value.is_boolean()) {
+        return Err(shape("proxy-groups[].lazy"));
+    }
+    if kind == "url-test"
+        && group.get("tolerance").is_some_and(|value| {
+            value
+                .as_u64()
+                .is_none_or(|number| u16::try_from(number).is_err())
+        })
+    {
+        return Err(shape("proxy-groups[].tolerance"));
+    }
+    Ok(())
+}
+
 impl ConfigDocument {
     pub fn read(path: &Path) -> Result<Self, Error> {
         let file = File::open(path).map_err(|_| Error::Read)?;
@@ -288,6 +318,7 @@ impl ConfigDocument {
             if !GROUP_TYPES.contains(&kind) {
                 return Err(shape("proxy-groups[].type"));
             }
+            check_group_health(g, kind)?;
             let mut edges = Vec::new();
             for member in list(g, "proxies")? {
                 edges.push(nonempty(member, "proxy-groups[].proxies[]")?);
