@@ -53,9 +53,8 @@ fn user_rules_are_checked_against_candidate_references() {
 
 #[test]
 fn only_one_concurrent_writer_can_publish_same_generation() {
-    let store = Arc::new(
-        ProfileStore::new(document("mode: rule"), UserRules::default()).expect("store"),
-    );
+    let store =
+        Arc::new(ProfileStore::new(document("mode: rule"), UserRules::default()).expect("store"));
     let barrier = Arc::new(Barrier::new(3));
     let writers: Vec<_> = ["mode: direct", "mode: global"]
         .into_iter()
