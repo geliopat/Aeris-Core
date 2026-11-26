@@ -1,0 +1,7 @@
+# Rust dependency policy / Проверка зависимостей Rust
+
+The Windows x64 dependency graph is checked with cargo-deny through its verified upstream stable action v2.1.4. CI runs on push and pull request; daily checks apply to the default branch after merge. Checks cover the RustSec database (including unmaintained/unsound reports), license metadata/text, forbidden wildcard requirements and unapproved registries/Git origins. No advisory exceptions or unapproved source exceptions are configured. Multiple crate versions are reported, not automatically forbidden.
+
+The initial third-party license allowlist is conservative and must be reviewed before expansion. Unknown or non-allowlisted licenses fail CI. This is an engineering gate, not a legal opinion or permission to copy upstream code/resources. Local Aeris workspace crates explicitly set publish=false and are excluded from the license check until project licensing is decided; they are still included in the dependency graph. This does not prevent GitHub binary releases once the release gates and licensing are resolved. No crates.io publication is planned.
+
+No dependency-policy test is claimed passed until its workflow reports success. Driver binaries, Lua resources, lists, TLS data and adapted upstream source require a separate per-artifact review. A separate cargo-audit invocation can be added if necessary; cargo-deny already checks the RustSec advisory database.
