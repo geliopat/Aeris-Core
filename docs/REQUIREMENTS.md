@@ -67,4 +67,18 @@
 | QA-03 | Same-condition comparative benchmarks, CPU/RAM/latency/throughput/connection/24h/72h/leak | TESTING §4 |
 | QA-04 | All release gates, RU/EN docs GitHub Pages/search/channels, examples in CI, public matrix | TESTING §5, ROADMAP |
 
+## Проверенные части требований — 2026-11-27
+
+Указанный результат относится только к конкретным проверенным частям. Статус целого требования остаётся `PARTIAL`; подробности, SHA и пределы проверок приведены в [STATUS.md](STATUS.md).
+
+| ID | Статус | Частичное подтверждение и ограничение |
+|---|---|---|
+| CFG-01 | PARTIAL | Конфигурационная PR #1 влита в Aeris-Core main (`0bfdafd`, head `6aa54a9`). Проверены 20 Rust-тестов, rustfmt, Clippy, GitHub Core CI и dependency policy. Реализованы структурный парсер и базовые проверки. Полная схема и совместимость с обезличенными fixtures FlClashX остаются непроверенными. |
+| CFG-02 | PARTIAL | PR #3 на `e5ee837` подтвердил порядок и отключение пользовательских правил и неизменность исходного YAML на уровне снимков. UI, IPC, хранение и действующая маршрутизация остаются открытыми. |
+| CFG-03 | PARTIAL | PR #3 подтвердил отказ при конфликте поколений, сохранение правил при обновлении и сохранение рабочего снимка при ошибке. Дисковая история, атомарное применение в сети и активные соединения требуют дополнительных проверок. |
+| CORE-03 | PARTIAL | PR #2 влит в `96857f9`. Windows Core CI на `cc7c337` подтвердил IPv4/IPv6 TCP и UDP loopback, ограниченную очередь, отмену и full-duplex TCP. Сетевой lifecycle и нагрузочные сценарии остаются открытыми. |
+| SEC-02 | PARTIAL | PR #1 в Aeris-Resources (`fddb5b5`, слита в `855699f`) добавила статическую проверку каталога. Подтверждены 8 тестов, локальная проверка и независимое security review. Подписанных ресурсов и runtime-проверки доверия нет. |
+| REL-03 | PARTIAL | Статический каталог проверяет наличие метаданных источника, ревизии и лицензии. Аудит конкретных ресурсов, проверка их совместимости и процедуры обновления остаются открытыми. |
+| QA-01 | PARTIAL | Для отдельных ревизий выполнены указанные Rust- и ресурсные проверки. Полный набор QA-01, интеграционные и системные проверки не завершены. |
+
 Do not expand IDs into new requirements not present in the referenced documents. For detailed acceptance criteria retain the full documents and user-approved defaults; test IDs can be finer-grained. Initial status and green branch checks: [STATUS.md](STATUS.md).
