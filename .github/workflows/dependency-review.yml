@@ -20,3 +20,4 @@ jobs:
         with:
           arguments: '--locked --all-features'
           command: check
+          rust-version: stable
