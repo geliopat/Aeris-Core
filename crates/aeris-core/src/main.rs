@@ -16,8 +16,14 @@ fn main() -> ExitCode {
             match ConfigDocument::read(Path::new(path)).and_then(|doc| doc.check()) {
                 Ok(report) => {
                     println!("Structural check passed; runtime compatibility NOT verified.");
-                    println!("Unchecked top-level fields: {}", report.unchecked_top_level_fields);
-                    println!("Unchecked rule matchers: {}", report.unchecked_rule_matchers);
+                    println!(
+                        "Unchecked top-level fields: {}",
+                        report.unchecked_top_level_fields
+                    );
+                    println!(
+                        "Unchecked rule matchers: {}",
+                        report.unchecked_rule_matchers
+                    );
                     println!("Rules following MATCH: {}", report.rules_after_match);
                 }
                 Err(error) => {

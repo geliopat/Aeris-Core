@@ -18,18 +18,6 @@ jobs:
           components: rustfmt, clippy
           targets: x86_64-pc-windows-msvc
       - uses: Swatinem/rust-cache@v2.9.3
-      # Temporary, branch-only bootstrapping; commit generated lock and remove this step before merge.
-      - name: Bootstrap lockfile (configuration branch only)
-        if: github.ref == 'refs/heads/feature/configuration-foundation'
-        shell: pwsh
-        run: |
-          cargo generate-lockfile
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Write-Output 'LOCKFILE_START'
-          Get-Content Cargo.lock
-          Write-Output 'LOCKFILE_END'
-          cargo fmt --all
-          git diff -- '*.rs'
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked

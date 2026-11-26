@@ -102,7 +102,7 @@ fn decode(text: &str) -> Result<Value, Error> {
     options.budget = Some(budget);
     options.reject_unsupported_tags = true;
     options.reject_tagged_field_names = true;
-    options.reject_non_finite_typeless_float = true;
+    options.non_finite_float_policy = serde_saphyr::NonFiniteFloatPolicy::Reject;
     options.with_snippet = false;
     serde_saphyr::from_str_with_options(text, options).map_err(|_| Error::Syntax)
 }
@@ -132,11 +132,7 @@ fn nonempty<'a>(value: &'a Value, path: &str) -> Result<&'a str, Error> {
         .ok_or_else(|| shape(path))
 }
 
-fn required<'a>(
-    map: &'a Map<String, Value>,
-    field: &str,
-    path: &str,
-) -> Result<&'a str, Error> {
+fn required<'a>(map: &'a Map<String, Value>, field: &str, path: &str) -> Result<&'a str, Error> {
     nonempty(map.get(field).ok_or_else(|| shape(path))?, path)
 }
 
@@ -166,10 +162,7 @@ fn string_list(map: &Map<String, Value>, field: &str) -> Result<(), Error> {
 
 fn port(value: &Value, path: &str, allow_zero: bool) -> Result<(), Error> {
     let min = u64::from(!allow_zero);
-    if value
-        .as_u64()
-        .is_none_or(|n| !(min..=65_535).contains(&n))
-    {
+    if value.as_u64().is_none_or(|n| !(min..=65_535).contains(&n)) {
         return Err(shape(path));
     }
     Ok(())
@@ -225,7 +218,12 @@ impl ConfigDocument {
         if let Some(value) = root.get("tun") {
             let tun = mapping(value, "tun")?;
             enum_field(tun, "stack", &["system", "rips", "mixed", "auto"])?;
-            for field in ["enable", "auto-route", "strict-route", "auto-detect-interface"] {
+            for field in [
+                "enable",
+                "auto-route",
+                "strict-route",
+                "auto-detect-interface",
+            ] {
                 bool_field(tun, field)?;
             }
             for field in ["dns-hijack", "route-exclude-address"] {
@@ -298,7 +296,8 @@ impl ConfigDocument {
                 report.rules_after_match += 1;
             }
             let mut parts = rule.split(',').map(str::trim);
-            match parts.next() {
+            let kind = parts.next();
+            match kind {
                 Some("MATCH") => {
                     let target = parts.next().ok_or_else(|| shape("rules[].MATCH"))?;
                     if target.is_empty() || parts.next().is_some() {
@@ -309,15 +308,14 @@ impl ConfigDocument {
                 }
                 Some(
                     "DOMAIN" | "DOMAIN-SUFFIX" | "DOMAIN-KEYWORD" | "IP-CIDR" | "IP-CIDR6"
-                    | "GEOIP" | "GEOSITE" | "IP-ASN" | "PROCESS-NAME" | "PROCESS-PATH"
-                    | "RULE-SET",
+                    | "GEOIP" | "GEOSITE" | "IP-ASN" | "PROCESS-NAME" | "PROCESS-PATH" | "RULE-SET",
                 ) => {
                     let matcher = parts.next().ok_or_else(|| shape("rules[]"))?;
                     let target = parts.next().ok_or_else(|| shape("rules[]"))?;
                     if matcher.is_empty() || target.is_empty() {
                         return Err(shape("rules[]"));
                     }
-                    if rule.starts_with("RULE-SET,") && !rule_providers.contains(matcher) {
+                    if kind == Some("RULE-SET") && !rule_providers.contains(matcher) {
                         return Err(Error::Reference("rules[].RULE-SET".to_owned()));
                     }
                     check_target(&graph, target)?;
