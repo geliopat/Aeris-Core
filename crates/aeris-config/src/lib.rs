@@ -7,6 +7,9 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
+mod snapshot;
+pub use snapshot::{ConfigSnapshot, ProfileStore, StoreError};
+
 pub const MAX_INPUT_BYTES: usize = 16 * 1024 * 1024;
 const BUILTINS: &[&str] = &[
     "DIRECT",
@@ -81,6 +84,7 @@ pub struct ConfigDocument {
 pub struct CheckReport {
     pub unchecked_top_level_fields: usize,
     pub unchecked_rule_matchers: usize,
+    pub user_rules_after_match: usize,
     pub rules_after_match: usize,
 }
 
@@ -198,6 +202,10 @@ impl ConfigDocument {
     }
 
     pub fn check(&self) -> Result<CheckReport, Error> {
+        self.check_with_user_rules(None)
+    }
+
+    pub fn check_with_user_rules(&self, user: Option<&UserRules>) -> Result<CheckReport, Error> {
         let root = &self.parsed;
         let mut report = CheckReport::default();
         enum_field(root, "mode", &["rule", "global", "direct"])?;
@@ -290,38 +298,20 @@ impl ConfigDocument {
         }
         check_graph(&graph)?;
         let mut matched = false;
+        if let Some(user) = user {
+            for rule in &user.rules {
+                if matched {
+                    report.user_rules_after_match += 1;
+                }
+                check_rule(rule, &graph, &rule_providers, &mut report, &mut matched)?;
+            }
+        }
         for rule in list(root, "rules")? {
             let rule = nonempty(rule, "rules[]")?;
             if matched {
                 report.rules_after_match += 1;
             }
-            let mut parts = rule.split(',').map(str::trim);
-            let kind = parts.next();
-            match kind {
-                Some("MATCH") => {
-                    let target = parts.next().ok_or_else(|| shape("rules[].MATCH"))?;
-                    if target.is_empty() || parts.next().is_some() {
-                        return Err(shape("rules[].MATCH"));
-                    }
-                    check_target(&graph, target)?;
-                    matched = true;
-                }
-                Some(
-                    "DOMAIN" | "DOMAIN-SUFFIX" | "DOMAIN-KEYWORD" | "IP-CIDR" | "IP-CIDR6"
-                    | "GEOIP" | "GEOSITE" | "IP-ASN" | "PROCESS-NAME" | "PROCESS-PATH" | "RULE-SET",
-                ) => {
-                    let matcher = parts.next().ok_or_else(|| shape("rules[]"))?;
-                    let target = parts.next().ok_or_else(|| shape("rules[]"))?;
-                    if matcher.is_empty() || target.is_empty() {
-                        return Err(shape("rules[]"));
-                    }
-                    if kind == Some("RULE-SET") && !rule_providers.contains(matcher) {
-                        return Err(Error::Reference("rules[].RULE-SET".to_owned()));
-                    }
-                    check_target(&graph, target)?;
-                }
-                _ => report.unchecked_rule_matchers += 1,
-            }
+            check_rule(rule, &graph, &rule_providers, &mut report, &mut matched)?;
         }
         const CHECKED: &[&str] = &[
             "mode",
@@ -358,6 +348,43 @@ impl ConfigDocument {
                 .filter_map(Value::as_str),
         )
     }
+}
+
+fn check_rule(
+    rule: &str,
+    graph: &BTreeMap<&str, Vec<&str>>,
+    rule_providers: &BTreeSet<&str>,
+    report: &mut CheckReport,
+    matched: &mut bool,
+) -> Result<(), Error> {
+    let mut parts = rule.split(',').map(str::trim);
+    let kind = parts.next();
+    match kind {
+        Some("MATCH") => {
+            let target = parts.next().ok_or_else(|| shape("rules[].MATCH"))?;
+            if target.is_empty() || parts.next().is_some() {
+                return Err(shape("rules[].MATCH"));
+            }
+            check_target(graph, target)?;
+            *matched = true;
+        }
+        Some(
+            "DOMAIN" | "DOMAIN-SUFFIX" | "DOMAIN-KEYWORD" | "IP-CIDR" | "IP-CIDR6" | "GEOIP"
+            | "GEOSITE" | "IP-ASN" | "PROCESS-NAME" | "PROCESS-PATH" | "RULE-SET",
+        ) => {
+            let matcher = parts.next().ok_or_else(|| shape("rules[]"))?;
+            let target = parts.next().ok_or_else(|| shape("rules[]"))?;
+            if matcher.is_empty() || target.is_empty() {
+                return Err(shape("rules[]"));
+            }
+            if kind == Some("RULE-SET") && !rule_providers.contains(matcher) {
+                return Err(Error::Reference("rules[].RULE-SET".to_owned()));
+            }
+            check_target(graph, target)?;
+        }
+        _ => report.unchecked_rule_matchers += 1,
+    }
+    Ok(())
 }
 
 fn provider_names<'a>(
@@ -430,6 +457,7 @@ fn check_graph(graph: &BTreeMap<&str, Vec<&str>>) -> Result<(), Error> {
 }
 
 /// Separate ordered user-rule document, never a provider-YAML override.
+#[derive(Default)]
 pub struct UserRules {
     rules: Vec<String>,
 }

@@ -11,3 +11,9 @@ Development branch, not a stable YAML contract.
 - Parser dependencies: serde-saphyr 2.2.0 and serde_json 1.x. Build lockfile and audit dependency licenses/security before merge. No upstream project code copied.
 
 The first fixture is synthetic, not evidence of server or real-profile compatibility.
+
+## Immutable profile candidates
+
+The internal ProfileStore publishes structurally checked immutable snapshots, with independent user rules and a generation precondition. Invalid candidates and stale writers leave the old snapshot unchanged. Existing readers retain the old snapshot; one previous snapshot can be restored with a new generation. This is in-memory candidate storage only; there is no active configuration, disk persistence, live socket migration or runtime rollback yet. User rules with supported simple matchers are checked against candidate proxy/group/provider references. Complex matcher semantics and nested fields remain unchecked. The CLI accepts both `config check` and the documented `config test` alias.
+
+The initial parser CI passed on Windows x64 (45838313971). New snapshot, CLI and concurrency tests require their own successful CI before merge.

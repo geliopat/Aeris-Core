@@ -2,7 +2,7 @@ use aeris_config::ConfigDocument;
 use std::path::Path;
 use std::process::ExitCode;
 
-const HELP: &str = "Aeris Core (development scaffold)\nUsage: aeris <help|version|config check FILE>\nNetworking commands are not implemented yet.";
+const HELP: &str = "Aeris Core (development scaffold)\nUsage: aeris <help|version|config check|test FILE>\nNetworking commands are not implemented yet.";
 
 fn main() -> ExitCode {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
@@ -12,7 +12,7 @@ fn main() -> ExitCode {
         [arg] if arg == "version" || arg == "--version" || arg == "-V" => {
             println!("Aeris Core {}", env!("CARGO_PKG_VERSION"));
         }
-        [config, check, path] if config == "config" && check == "check" => {
+        [config, check, path] if config == "config" && (check == "check" || check == "test") => {
             match ConfigDocument::read(Path::new(path)).and_then(|doc| doc.check()) {
                 Ok(report) => {
                     println!("Structural check passed; runtime compatibility NOT verified.");
