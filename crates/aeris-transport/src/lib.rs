@@ -9,9 +9,10 @@ use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::net::tcp::{ReadHalf, WriteHalf};
 use tokio::net::{TcpStream, UdpSocket};
-use tokio::sync::{OwnedSemaphorePermit, Semaphore, watch};
+use tokio::sync::{OwnedSemaphorePermit, Semaphore, TryAcquireError, watch};
 
 pub const MAX_UDP_PAYLOAD: usize = 65_507;
 pub const UDP_RECEIVE_BUFFER: usize = 65_535;
@@ -19,6 +20,9 @@ pub const UDP_RECEIVE_BUFFER: usize = 65_535;
 #[derive(Clone, Copy, Debug)]
 pub struct Settings {
     pub max_sockets: usize,
+    /// Maximum number of connect or bind requests waiting for a socket slot.
+    /// Zero requires requests to obtain a slot immediately.
+    pub max_pending_sockets: usize,
     pub capacity_timeout: Duration,
     pub connect_timeout: Duration,
     pub io_timeout: Duration,
@@ -29,6 +33,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             max_sockets: 256,
+            max_pending_sockets: 256,
             capacity_timeout: Duration::from_secs(5),
             connect_timeout: Duration::from_secs(10),
             io_timeout: Duration::from_secs(30),
@@ -54,6 +59,7 @@ pub enum Operation {
 pub enum Error {
     InvalidSettings,
     Cancelled,
+    CapacityQueueFull,
     Timeout(Operation),
     Io(Operation, io::ErrorKind),
     DatagramTooLarge,
@@ -65,6 +71,7 @@ impl fmt::Display for Error {
         match self {
             Self::InvalidSettings => f.write_str("invalid transport settings"),
             Self::Cancelled => f.write_str("transport stopped"),
+            Self::CapacityQueueFull => f.write_str("transport socket wait queue is full"),
             Self::Timeout(op) => write!(f, "transport {op:?} timed out"),
             Self::Io(op, kind) => write!(f, "transport {op:?} failed: {kind:?}"),
             Self::DatagramTooLarge => f.write_str("datagram exceeds transport payload limit"),
@@ -78,6 +85,7 @@ impl std::error::Error for Error {}
 struct Control {
     settings: Settings,
     capacity: Arc<Semaphore>,
+    pending: Semaphore,
     stop: watch::Sender<bool>,
 }
 
@@ -122,6 +130,15 @@ impl Control {
 
     async fn reserve(&self) -> Result<OwnedSemaphorePermit, Error> {
         self.run(Operation::Capacity, self.settings.capacity_timeout, async {
+            match Arc::clone(&self.capacity).try_acquire_owned() {
+                Ok(permit) => return Ok(permit),
+                Err(TryAcquireError::Closed) => return Err(Error::Cancelled),
+                Err(TryAcquireError::NoPermits) => {}
+            }
+            let _waiting = self.pending.try_acquire().map_err(|err| match err {
+                TryAcquireError::Closed => Error::Cancelled,
+                TryAcquireError::NoPermits => Error::CapacityQueueFull,
+            })?;
             Arc::clone(&self.capacity)
                 .acquire_owned()
                 .await
@@ -129,10 +146,46 @@ impl Control {
         })
         .await
     }
+
+    async fn read_tcp(
+        &self,
+        stream: &mut (impl AsyncRead + Unpin),
+        buffer: &mut [u8],
+    ) -> Result<usize, Error> {
+        self.io(
+            Operation::Read,
+            self.settings.io_timeout,
+            stream.read(buffer),
+        )
+        .await
+    }
+
+    async fn write_tcp(
+        &self,
+        stream: &mut (impl AsyncWrite + Unpin),
+        buffer: &[u8],
+    ) -> Result<usize, Error> {
+        self.io(
+            Operation::Write,
+            self.settings.io_timeout,
+            stream.write(buffer),
+        )
+        .await
+    }
+
+    async fn shutdown_tcp(&self, stream: &mut (impl AsyncWrite + Unpin)) -> Result<(), Error> {
+        self.io(
+            Operation::HalfClose,
+            self.settings.io_timeout,
+            stream.shutdown(),
+        )
+        .await
+    }
 }
 
 /// A shared transport lifecycle. The session limit counts open TCP streams,
-/// bound UDP sockets and in-progress connection/bind attempts.
+/// bound UDP sockets and in-progress connection/bind attempts. Waiting
+/// attempts share a separate bounded queue across all clones.
 #[derive(Clone)]
 pub struct Transport {
     control: Arc<Control>,
@@ -142,6 +195,7 @@ impl Transport {
     pub fn new(settings: Settings) -> Result<Self, Error> {
         let valid_timeout = |d: Duration| !d.is_zero() && d <= Duration::from_secs(86_400);
         if !(1..=65_536).contains(&settings.max_sockets)
+            || settings.max_pending_sockets > 65_536
             || !valid_timeout(settings.capacity_timeout)
             || !valid_timeout(settings.connect_timeout)
             || !valid_timeout(settings.io_timeout)
@@ -153,6 +207,7 @@ impl Transport {
             control: Arc::new(Control {
                 settings,
                 capacity: Arc::new(Semaphore::new(settings.max_sockets)),
+                pending: Semaphore::new(settings.max_pending_sockets),
                 stop,
             }),
         })
@@ -163,6 +218,7 @@ impl Transport {
     pub fn shutdown(&self) {
         self.control.stop.send_replace(true);
         self.control.capacity.close();
+        self.control.pending.close();
     }
 
     pub async fn connect_tcp(&self, address: SocketAddr) -> Result<TcpConnection, Error> {
@@ -225,34 +281,63 @@ impl TcpConnection {
     /// May return fewer bytes than requested. A nonempty buffer and zero bytes
     /// read means EOF. No automatic replay, reconnection or fallback occurs.
     pub async fn read(&mut self, buffer: &mut [u8]) -> Result<usize, Error> {
-        self.control
-            .io(
-                Operation::Read,
-                self.control.settings.io_timeout,
-                self.stream.read(buffer),
-            )
-            .await
+        self.control.read_tcp(&mut self.stream, buffer).await
     }
 
     /// One partial write; caller advances by the returned byte count.
     pub async fn write(&mut self, buffer: &[u8]) -> Result<usize, Error> {
-        self.control
-            .io(
-                Operation::Write,
-                self.control.settings.io_timeout,
-                self.stream.write(buffer),
-            )
-            .await
+        self.control.write_tcp(&mut self.stream, buffer).await
     }
 
     pub async fn shutdown_write(&mut self) -> Result<(), Error> {
-        self.control
-            .io(
-                Operation::HalfClose,
-                self.control.settings.io_timeout,
-                self.stream.shutdown(),
-            )
-            .await
+        self.control.shutdown_tcp(&mut self.stream).await
+    }
+
+    /// Borrow independent read and write halves for full-duplex I/O. Both
+    /// halves use the connection's existing capacity slot and stop signal.
+    pub fn split(&mut self) -> (TcpReader<'_>, TcpWriter<'_>) {
+        let (reader, writer) = self.stream.split();
+        (
+            TcpReader {
+                reader,
+                control: &self.control,
+            },
+            TcpWriter {
+                writer,
+                control: &self.control,
+            },
+        )
+    }
+}
+
+/// Read side of a borrowed TCP connection.
+pub struct TcpReader<'a> {
+    reader: ReadHalf<'a>,
+    control: &'a Control,
+}
+
+impl TcpReader<'_> {
+    /// Reads up to the buffer length. Zero with a nonempty buffer means EOF.
+    pub async fn read(&mut self, buffer: &mut [u8]) -> Result<usize, Error> {
+        self.control.read_tcp(&mut self.reader, buffer).await
+    }
+}
+
+/// Write side of a borrowed TCP connection.
+pub struct TcpWriter<'a> {
+    writer: WriteHalf<'a>,
+    control: &'a Control,
+}
+
+impl TcpWriter<'_> {
+    /// One partial write; caller advances by the returned byte count.
+    pub async fn write(&mut self, buffer: &[u8]) -> Result<usize, Error> {
+        self.control.write_tcp(&mut self.writer, buffer).await
+    }
+
+    /// Closes the write side while leaving the read side available.
+    pub async fn shutdown_write(&mut self) -> Result<(), Error> {
+        self.control.shutdown_tcp(&mut self.writer).await
     }
 }
 

@@ -1,11 +1,15 @@
 use aeris_transport::{Error, MAX_UDP_PAYLOAD, Operation, Settings, Transport, UDP_RECEIVE_BUFFER};
-use std::net::{Ipv4Addr, SocketAddr};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
 fn loopback() -> SocketAddr {
     SocketAddr::from((Ipv4Addr::LOCALHOST, 0))
+}
+
+fn loopback_v6() -> SocketAddr {
+    SocketAddr::from((Ipv6Addr::LOCALHOST, 0))
 }
 
 fn settings() -> Settings {
@@ -34,11 +38,27 @@ fn invalid_limits_are_rejected() {
         }),
         Err(Error::InvalidSettings)
     ));
+    assert!(matches!(
+        Transport::new(Settings {
+            max_pending_sockets: 65_537,
+            ..settings()
+        }),
+        Err(Error::InvalidSettings)
+    ));
 }
 
 #[tokio::test]
 async fn tcp_round_trip_and_half_close() {
-    let listener = TcpListener::bind(loopback()).await.expect("bind");
+    tcp_round_trip(loopback()).await;
+}
+
+#[tokio::test]
+async fn tcp_round_trip_and_half_close_ipv6() {
+    tcp_round_trip(loopback_v6()).await;
+}
+
+async fn tcp_round_trip(bind_address: SocketAddr) {
+    let listener = TcpListener::bind(bind_address).await.expect("bind");
     let address = listener.local_addr().expect("address");
     let server = tokio::spawn(async move {
         let (mut stream, _) = listener.accept().await.expect("accept");
@@ -76,10 +96,66 @@ async fn tcp_round_trip_and_half_close() {
 }
 
 #[tokio::test]
+async fn tcp_split_can_read_while_writing_and_half_closing() {
+    let listener = TcpListener::bind(loopback()).await.expect("bind");
+    let address = listener.local_addr().expect("address");
+    let server = async {
+        let (mut stream, _) = listener.accept().await.expect("accept");
+        let mut request = Vec::new();
+        stream
+            .read_to_end(&mut request)
+            .await
+            .expect("request and EOF");
+        assert_eq!(request, b"?\n");
+        stream.write_all(b"!\n").await.expect("reply");
+    };
+    let client = async {
+        let transport = Transport::new(settings()).expect("transport");
+        let mut connection = transport.connect_tcp(address).await.expect("connect");
+        let (mut reader, mut writer) = connection.split();
+        let receive = async {
+            let mut reply = [0; 2];
+            let mut received = 0;
+            while received < reply.len() {
+                let count = reader.read(&mut reply[received..]).await.expect("read");
+                assert!(count > 0);
+                received += count;
+            }
+            assert_eq!(&reply, b"!\n");
+        };
+        let send = async {
+            let payload = b"?\n";
+            let mut sent = 0;
+            while sent < payload.len() {
+                let count = writer.write(&payload[sent..]).await.expect("write");
+                assert!(count > 0);
+                sent += count;
+            }
+            writer.shutdown_write().await.expect("half close");
+        };
+        tokio::join!(biased; receive, send);
+    };
+    tokio::time::timeout(Duration::from_secs(5), async {
+        tokio::join!(server, client);
+    })
+    .await
+    .expect("round trip deadline");
+}
+
+#[tokio::test]
 async fn udp_round_trip_and_buffer_limits() {
+    udp_round_trip(loopback()).await;
+}
+
+#[tokio::test]
+async fn udp_round_trip_and_buffer_limits_ipv6() {
+    udp_round_trip(loopback_v6()).await;
+}
+
+async fn udp_round_trip(bind_address: SocketAddr) {
     let transport = Transport::new(settings()).expect("transport");
-    let sender = transport.bind_udp(loopback()).await.expect("sender");
-    let receiver = transport.bind_udp(loopback()).await.expect("receiver");
+    let sender = transport.bind_udp(bind_address).await.expect("sender");
+    let receiver = transport.bind_udp(bind_address).await.expect("receiver");
     let address = receiver.local_addr().expect("address");
     assert_eq!(sender.send_to(b"hello", address).await.expect("send"), 5);
     let mut buffer = vec![0; UDP_RECEIVE_BUFFER];
@@ -112,6 +188,57 @@ async fn socket_capacity_is_shared_and_released() {
     ));
     drop(first);
     assert!(other.bind_udp(loopback()).await.is_ok());
+}
+
+#[tokio::test]
+async fn waiting_capacity_is_bounded_and_dropped_waiters_release_it() {
+    let transport = Transport::new(Settings {
+        max_sockets: 1,
+        max_pending_sockets: 1,
+        capacity_timeout: Duration::from_secs(3),
+        ..settings()
+    })
+    .expect("transport");
+    let first = transport.bind_udp(loopback()).await.expect("first");
+    let other = transport.clone();
+    let mut pending = Box::pin(transport.bind_udp(loopback()));
+    tokio::select! {
+        biased;
+        _ = &mut pending => panic!("socket slot should be occupied"),
+        () = std::future::ready(()) => {}
+    }
+    assert!(matches!(
+        other.connect_tcp(loopback()).await,
+        Err(Error::CapacityQueueFull)
+    ));
+    drop(pending);
+
+    let replacement = other.bind_udp(loopback());
+    tokio::pin!(replacement);
+    tokio::select! {
+        biased;
+        _ = &mut replacement => panic!("replacement should obtain the freed queue slot and wait"),
+        () = std::future::ready(()) => {}
+    }
+    drop(first);
+    assert!(replacement.await.is_ok());
+}
+
+#[tokio::test]
+async fn zero_pending_capacity_rejects_overload_without_rejecting_available_slots() {
+    let transport = Transport::new(Settings {
+        max_sockets: 1,
+        max_pending_sockets: 0,
+        ..settings()
+    })
+    .expect("transport");
+    let first = transport.bind_udp(loopback()).await.expect("first");
+    assert!(matches!(
+        transport.bind_udp(loopback()).await,
+        Err(Error::CapacityQueueFull)
+    ));
+    drop(first);
+    assert!(transport.bind_udp(loopback()).await.is_ok());
 }
 
 #[tokio::test]
