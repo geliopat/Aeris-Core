@@ -54,6 +54,81 @@ fn rejects_bad_types_and_ports() {
 }
 
 #[test]
+fn accepts_nameserver_policy_scalars_and_lists_without_rewriting_source() {
+    let source = include_str!("fixtures/nameserver-policy.yaml");
+    let document = parse(source);
+    let report = document.check().expect("policy shape");
+    assert_eq!(report.unchecked_top_level_fields, 0);
+    assert_eq!(document.original().as_bytes(), source.as_bytes());
+}
+
+#[test]
+fn accepts_empty_optional_nameserver_policy_shapes() {
+    for source in [
+        "dns: {}",
+        "dns: {nameserver-policy: null}",
+        "dns: {nameserver-policy: {}}",
+        "dns: {nameserver-policy: {disabled.example: []}}",
+    ] {
+        let document = parse(source);
+        document.check().expect("empty policy shape");
+        assert_eq!(document.original(), source);
+    }
+}
+
+#[test]
+fn rejects_invalid_nameserver_policy_shapes_without_echoing_selectors_or_values() {
+    for (policy, path) in [
+        (
+            "['https://private.example/probe?token=fixture']",
+            "dns.nameserver-policy",
+        ),
+        ("false", "dns.nameserver-policy"),
+        (
+            "{\"   \": tls://resolver.example}",
+            "dns.nameserver-policy.key",
+        ),
+        ("{private.example: null}", "dns.nameserver-policy[]"),
+        ("{private.example: 53}", "dns.nameserver-policy[]"),
+        ("{private.example: '  '}", "dns.nameserver-policy[]"),
+        (
+            "{private.example: {url: 'tls://private.example'}}",
+            "dns.nameserver-policy[]",
+        ),
+        (
+            "{private.example: [tls://resolver.example, false]}",
+            "dns.nameserver-policy[][]",
+        ),
+        ("{private.example: [null]}", "dns.nameserver-policy[][]"),
+        ("{private.example: ['']}", "dns.nameserver-policy[][]"),
+        (
+            "{private.example: [[tls://resolver.example]]}",
+            "dns.nameserver-policy[][]",
+        ),
+    ] {
+        let source = format!("dns: {{nameserver-policy: {policy}}}");
+        let error = parse(&source).check().expect_err("invalid policy shape");
+        assert_eq!(error, Error::Shape(path.to_owned()));
+        assert_eq!(error.to_string(), format!("invalid structure at {path}"));
+    }
+}
+
+#[test]
+fn invalid_nameserver_policy_refresh_preserves_the_last_good_snapshot() {
+    let source = include_str!("fixtures/nameserver-policy.yaml");
+    let store = ProfileStore::new(parse(source), UserRules::default()).expect("profile store");
+    let prior = store.current().expect("current snapshot");
+    let invalid = "dns: {nameserver-policy: {private.example: [null]}}";
+    assert!(matches!(
+        store.refresh_provider(prior.generation(), parse(invalid)),
+        Err(StoreError::Invalid(Error::Shape(field))) if field == "dns.nameserver-policy[][]"
+    ));
+    let current = store.current().expect("last good snapshot");
+    assert!(Arc::ptr_eq(&prior, &current));
+    assert_eq!(current.original(), source);
+}
+
+#[test]
 fn checks_synthetic_group_health_profile_and_preserves_source() {
     let source = include_str!("fixtures/group-health.yaml");
     let document = parse(source);
