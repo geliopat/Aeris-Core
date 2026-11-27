@@ -20,4 +20,5 @@ The authoritative design baseline is in [Aeris-Core/docs](https://github.com/gel
 - [UPSTREAM.md](UPSTREAM.md) — эталоны и ревизии.
 - [AGENT-RESPONSIBILITIES.md](AGENT-RESPONSIBILITIES.md) — координация, ownership, merge gates.
 - [RELEASES.md](RELEASES.md) — каналы и выпуск.
-- [UPSTREAM-LICENSES.md](UPSTREAM-LICENSES.md) — предварительный аудит.
+- [UPSTREAM-LICENSES.md](UPSTREAM-LICENSES.md) и [DEPENDENCY-POLICY.md](DEPENDENCY-POLICY.md) — проверка происхождения, лицензий и зависимостей.
+- [CONFIG-IMPLEMENTATION.md](CONFIG-IMPLEMENTATION.md) и [TRANSPORT-IMPLEMENTATION.md](TRANSPORT-IMPLEMENTATION.md) — фактические контракты, доказательства и ограничения.
