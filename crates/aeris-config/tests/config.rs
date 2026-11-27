@@ -54,6 +54,105 @@ fn rejects_bad_types_and_ports() {
 }
 
 #[test]
+fn checks_fallback_filter_shapes_and_preserves_source() {
+    let source = include_str!("fixtures/fallback-filter.yaml");
+    let document = parse(source);
+    let report = document
+        .check()
+        .expect("fallback filter shape and CIDR checks");
+    assert_eq!(report.unchecked_top_level_fields, 0);
+    assert_eq!(document.original().as_bytes(), source.as_bytes());
+}
+
+#[test]
+fn accepts_omitted_null_and_empty_fallback_filters() {
+    for source in [
+        "dns: {}",
+        "dns: {fallback-filter: null}",
+        "dns: {fallback-filter: {}}",
+        "dns: {fallback: ['https://backup.example/dns-query'], fallback-filter: {geoip: null, geoip-code: null, ipcidr: null, domain: null, geosite: null}}",
+        "dns: {fallback-filter: {geoip-code: '', ipcidr: [], domain: [], geosite: []}}",
+        "dns: {fallback-filter: {domain: [''], geosite: [''], provider-extra: {shape: null}}}",
+    ] {
+        let document = parse(source);
+        document.check().expect("optional fallback filter shape");
+        assert_eq!(document.original(), source);
+    }
+}
+
+#[test]
+fn rejects_invalid_fallback_filter_shapes_without_echoing_values() {
+    for (filter, path) in [
+        (
+            "['https://private.example/probe?token=fixture']",
+            "dns.fallback-filter",
+        ),
+        ("{geoip: 'false'}", "dns.fallback-filter.geoip"),
+        ("{geoip-code: 53}", "dns.fallback-filter.geoip-code"),
+        ("{ipcidr: false}", "dns.fallback-filter.ipcidr"),
+        ("{ipcidr: [null]}", "dns.fallback-filter.ipcidr[]"),
+        ("{domain: private.example}", "dns.fallback-filter.domain"),
+        ("{domain: [53]}", "dns.fallback-filter.domain[]"),
+        ("{geosite: {name: private}}", "dns.fallback-filter.geosite"),
+        (
+            "{geosite: [[private.example]]}",
+            "dns.fallback-filter.geosite[]",
+        ),
+    ] {
+        let source = format!("dns: {{fallback-filter: {filter}}}");
+        let error = parse(&source)
+            .check()
+            .expect_err("invalid fallback filter shape");
+        assert_eq!(error, Error::Shape(path.to_owned()));
+        assert_eq!(error.to_string(), format!("invalid structure at {path}"));
+    }
+}
+
+#[test]
+fn validates_fallback_cidr_prefixes_only_with_configured_resolvers() {
+    let dormant = "fallback-filter: {ipcidr: ['private.example/24']}";
+    for source in [
+        format!("dns: {{{dormant}}}"),
+        format!("dns: {{fallback: [], {dormant}}}"),
+    ] {
+        let document = parse(&source);
+        document
+            .check()
+            .expect("dormant filter preserves CIDR strings");
+        assert_eq!(document.original(), source);
+    }
+    for ipcidr in ["private.example/24", "192.0.2.7/33", "2001:db8::7/129"] {
+        let source = format!(
+            "dns: {{fallback: ['https://backup.example/dns-query'], fallback-filter: {{ipcidr: ['{ipcidr}']}}}}"
+        );
+        let error = parse(&source).check().expect_err("invalid configured CIDR");
+        assert_eq!(
+            error,
+            Error::Shape("dns.fallback-filter.ipcidr[]".to_owned())
+        );
+        assert_eq!(
+            error.to_string(),
+            "invalid structure at dns.fallback-filter.ipcidr[]"
+        );
+    }
+}
+
+#[test]
+fn rejects_invalid_fallback_refresh_and_retains_the_last_good_snapshot() {
+    let source = include_str!("fixtures/fallback-filter.yaml");
+    let store = ProfileStore::new(parse(source), UserRules::default()).expect("profile store");
+    let prior = store.current().expect("current snapshot");
+    let invalid = source.replace("192.0.2.17/24", "192.0.2.17/33");
+    assert!(matches!(
+        store.refresh_provider(prior.generation(), parse(&invalid)),
+        Err(StoreError::Invalid(Error::Shape(path))) if path == "dns.fallback-filter.ipcidr[]"
+    ));
+    let current = store.current().expect("last good snapshot");
+    assert!(Arc::ptr_eq(&prior, &current));
+    assert_eq!(current.original(), source);
+}
+
+#[test]
 fn accepts_nameserver_policy_scalars_and_lists_without_rewriting_source() {
     let source = include_str!("fixtures/nameserver-policy.yaml");
     let document = parse(source);

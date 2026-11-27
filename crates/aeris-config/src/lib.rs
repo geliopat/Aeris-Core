@@ -190,6 +190,53 @@ fn check_nameserver_policy(dns: &Map<String, Value>) -> Result<(), Error> {
     Ok(())
 }
 
+fn check_fallback_filter(dns: &Map<String, Value>) -> Result<(), Error> {
+    let Some(filter) = dns.get("fallback-filter").filter(|value| !value.is_null()) else {
+        return Ok(());
+    };
+    let filter = mapping(filter, "dns.fallback-filter")?;
+    if filter
+        .get("geoip")
+        .is_some_and(|value| !value.is_null() && !value.is_boolean())
+    {
+        return Err(shape("dns.fallback-filter.geoip"));
+    }
+    if filter
+        .get("geoip-code")
+        .is_some_and(|value| !value.is_null() && !value.is_string())
+    {
+        return Err(shape("dns.fallback-filter.geoip-code"));
+    }
+    let has_fallback = !list(dns, "fallback")?.is_empty();
+    for (field, path, item_path) in [
+        (
+            "ipcidr",
+            "dns.fallback-filter.ipcidr",
+            "dns.fallback-filter.ipcidr[]",
+        ),
+        (
+            "domain",
+            "dns.fallback-filter.domain",
+            "dns.fallback-filter.domain[]",
+        ),
+        (
+            "geosite",
+            "dns.fallback-filter.geosite",
+            "dns.fallback-filter.geosite[]",
+        ),
+    ] {
+        if let Some(values) = filter.get(field).filter(|value| !value.is_null()) {
+            for value in sequence(values, path)? {
+                let text = value.as_str().ok_or_else(|| shape(item_path))?;
+                if has_fallback && field == "ipcidr" {
+                    check_ip_prefix(text, item_path)?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 fn port(value: &Value, path: &str, allow_zero: bool) -> Result<(), Error> {
     let min = u64::from(!allow_zero);
     if value.as_u64().is_none_or(|n| !(min..=65_535).contains(&n)) {
@@ -311,6 +358,7 @@ impl ConfigDocument {
                 string_list(dns, field)?;
             }
             check_nameserver_policy(dns)?;
+            check_fallback_filter(dns)?;
         }
         let providers = provider_names(root, "proxy-providers")?;
         let rule_providers = provider_names(root, "rule-providers")?;
@@ -434,7 +482,7 @@ fn check_rule(
                 return Err(shape("rules[]"));
             }
             if matches!(kind.as_str(), "IP-CIDR" | "IP-CIDR6") {
-                check_ip_prefix(matcher)?;
+                check_ip_prefix(matcher, "rules[].IP-CIDR")?;
             }
             let accepts_ip_options = matches!(
                 kind.as_str(),
@@ -455,19 +503,15 @@ fn check_rule(
     Ok(())
 }
 
-fn check_ip_prefix(matcher: &str) -> Result<(), Error> {
-    let (address, length) = matcher
-        .rsplit_once('/')
-        .ok_or_else(|| shape("rules[].IP-CIDR"))?;
-    let address = address
-        .parse::<IpAddr>()
-        .map_err(|_| shape("rules[].IP-CIDR"))?;
+fn check_ip_prefix(matcher: &str, path: &str) -> Result<(), Error> {
+    let (address, length) = matcher.rsplit_once('/').ok_or_else(|| shape(path))?;
+    let address = address.parse::<IpAddr>().map_err(|_| shape(path))?;
     let max_length = if address.is_ipv4() { 32 } else { 128 };
     if length.starts_with('+')
         || (length.len() > 1 && length.starts_with('0'))
         || !length.parse::<u8>().is_ok_and(|bits| bits <= max_length)
     {
-        return Err(shape("rules[].IP-CIDR"));
+        return Err(shape(path));
     }
     Ok(())
 }
