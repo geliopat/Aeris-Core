@@ -2,7 +2,7 @@ use aeris_config::ConfigDocument;
 use std::path::Path;
 use std::process::ExitCode;
 
-const HELP: &str = "Aeris Core (development scaffold)\nUsage: aeris <help|version|config check|test FILE>\nNetworking commands are not implemented yet.";
+const HELP: &str = "Aeris Core (development scaffold)\nUsage: aeris help\n       aeris version\n       aeris config <check|test> FILE\nNetworking commands are not implemented yet.";
 
 fn main() -> ExitCode {
     let args: Vec<_> = std::env::args_os().skip(1).collect();

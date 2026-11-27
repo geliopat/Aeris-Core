@@ -1,6 +1,6 @@
 # Aeris — тестирование и критерии выпуска
 
-План проверок; результаты пока отсутствуют. Компиляция не считается подтверждением работоспособности.
+Обязательные проверки по мере появления компонентов. Фактически выполненные прогоны и их пределы см. в [STATUS.md](STATUS.md). Компиляция подтверждает сборку.
 
 ## 1. CI
 
@@ -25,7 +25,8 @@
 - DNS: UDP/TCP/DoH 1/2/3/DoT/DoQ, DNSSEC если включён, cache TTL/negative/prefetch/stale/coalescing, Fake-IP v4/v6, hybrid, policies/hosts, bootstrap through proxy, network change, hijack, DNS Always On/DNS Proxy Access; независимые очистки, никаких утечек в незаявленный resolver. ECH/шифрованные DNS — проверять ограничения, не обещать полное обнаружение.
 - Routing: все типы matcher, order, groups/select/health/fallback/smart/adaptive, sticky, dedup, GeoData/provider validation & rollback, chains, active route preservation, user rule priority, exclusions, explicit ZAPRET/DIRECT-NO-ZAPRET; Kill Switch fail-closed при заданной политике.
 - TUN: System/RIPS/Mixed/Auto, IPv4/IPv6/TCP/UDP/ICMP, route/driver handling, sleep/network change, bypass, повторный перехват и конфликты. Не считать функцию реализованной, если опция только парсится.
-- DPI: совместимые Lua API и packet semantics против Zapret2, Flowseal conversion (никакого BAT/CMD execution), unsupported strategies сообщать, include/exclude/auto sources, provenance/conflicts, autotest/history, four HTTPS probes + optional separate UDP/QUIC. Проверять, что VPN transport не модифицируется, standalone работает, переключатели независимы.
+- DPI на этапе 10. Проверить Lua API, семантику пакетов и параметры против Zapret2, актуальные стратегии Flowseal на Zapret2, импорт, обновление и ошибки несовместимости, отсутствие исполнения BAT/CMD, include/exclude/auto, provenance, конфликты, автоподбор/историю, четыре HTTPS-проверки и опциональные отдельные UDP/QUIC проверки. Проверить WinDivert, защиту от повторного перехвата и петель, исключение VPN-транспорта и независимые DNS/VPN/DPI, включая standalone.
+- WireGuard/AmneziaWG на этапе 6. Проверить обычный WireGuard и каждый актуальный и предыдущий официальный вариант AmneziaWG против официальных серверов, включая параметры обфускации, несовместимые комбинации и распознавание форматов. Проверить совместимые конфигурации Mihomo/FlClashX/FlClashZ и адаптированный Remnawave, маршрутизацию, DNS, TUN, группы и цепочки.
 - CLI/IPC: `aeris` доступен из любой директории pwsh в каждой поставке, разрешение имени при установленном GUI, JSON и exit codes, concurrent GUI/CLI, version/capability negotiation, ACL/roles/token, запрет arbitrary privileged commands, reconnect, offline module controls.
 - GUI: 2 режима строго по providermode, IP и фиксированные widgets, simple announce/no title, full no announce, sidebar layout/footer, profile refresh without navigation, переходы на полные страницы вместо popup, independent toggles, 4 DPI pings, DPI scaling, theme/fallback, animation/accessibility, RU/EN, tray, hotkeys default off, offline operation, notification dedup, safe confirmations.
 - Подписки: UA/HWID, отдельный Remnawave template, headers/legacy precedence, URLs/base64, malformed/403/404/empty, restore last working config, no local auto cutoff on expiry/quota, preserve selection/user rules. Проверить обновление без разрыва там, где заявлено.
@@ -44,7 +45,7 @@
 | Остальные протоколы | Mihomo FlClashX (и оригиналы для межоперационности) |
 | RIPS/System | MIPS/System Mihomo |
 | DNS/routing | Mihomo |
-| DPI | Zapret2 |
+| DPI | Flowseal на Zapret2 и оригинальный Zapret2 в сопоставимых режимах |
 | GUI | FlClashZ |
 
 Метрики: RAM idle/load, CPU при равной пропускной способности, max TCP/UDP throughput, RTT/jitter, DNS latency/throughput/cache, большие rulesets, concurrent connections, startup/restart, 24h и 72h endurance, handles/memory leaks. Одинаковые OS/hardware/network/server/config, фиксировать версии/условия, повторения и разброс, не сравнивать несопоставимые режимы. Публиковать методику и результаты; существенная регрессия блокирует релиз до расследования. Численные пороги установить на измеренной baseline, не придумывать цели из неподтверждённых цифр. Rust сам по себе не гарантирует ускорение.
@@ -63,3 +64,7 @@
 - [ ] Нет заглушек или неподтверждённых обещаний совместимости.
 
 Все пункты обязательны. Статус checklist — не пройден до получения результатов реальных проверок.
+
+## 6. Отложенные проверки модулей
+
+После стабилизации проверить версионную совместимость пакетов и зависимостей, подписи и целостность, разрешения и отказ при запрещённой операции, изоляцию стороннего кода от привилегированных процессов, сбои изолированных модулей, откат и безопасный запуск. Проверить работу клиента и ядра без модулей, независимые обновления и отсутствие регрессий сетевого тракта.

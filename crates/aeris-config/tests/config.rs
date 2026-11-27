@@ -316,6 +316,63 @@ fn duplicate_names_and_rule_references_fail() {
 }
 
 #[test]
+fn accepts_explicit_and_implicit_global_groups() {
+    let implicit = concat!(
+        "proxies:\n",
+        "  - {name: A, type: socks5, server: proxy.example, port: 1080, dialer-proxy: GLOBAL}\n",
+        "rules: ['MATCH,GLOBAL']",
+    );
+    let explicit = concat!(
+        "proxy-groups:\n",
+        "  - {name: A, type: select, proxies: [GLOBAL]}\n",
+        "  - {name: GLOBAL, type: select, proxies: [DIRECT]}\n",
+        "rules: ['MATCH,GLOBAL']",
+    );
+    for source in [implicit, explicit] {
+        let document = parse(source);
+        document.check().expect("valid GLOBAL group reference");
+        assert_eq!(document.original(), source);
+    }
+}
+
+#[test]
+fn rejects_implicit_global_as_a_group_member() {
+    let source = "proxy-groups: [{name: A, type: select, proxies: [GLOBAL]}]";
+    assert_eq!(
+        parse(source).check(),
+        Err(Error::Reference("proxy-groups[].proxies[]".to_owned()))
+    );
+}
+
+#[test]
+fn global_group_does_not_allow_duplicate_or_reserved_names() {
+    for source in [
+        "proxies: [{name: GLOBAL, type: socks5, server: proxy.example, port: 1080}]",
+        concat!(
+            "proxy-groups:\n",
+            "  - {name: GLOBAL, type: select, proxies: [DIRECT]}\n",
+            "  - {name: GLOBAL, type: select, proxies: [REJECT]}\n",
+        ),
+        "proxy-groups: [{name: DIRECT, type: select, proxies: [REJECT]}]",
+    ] {
+        assert_eq!(parse(source).check(), Err(Error::DuplicateName), "{source}");
+    }
+}
+
+#[test]
+fn rejects_cycles_through_an_explicit_global_group() {
+    let self_cycle = "proxy-groups: [{name: GLOBAL, type: select, proxies: [GLOBAL]}]";
+    let mutual_cycle = concat!(
+        "proxy-groups:\n",
+        "  - {name: A, type: select, proxies: [GLOBAL]}\n",
+        "  - {name: GLOBAL, type: select, proxies: [A]}\n",
+    );
+    for source in [self_cycle, mutual_cycle] {
+        assert_eq!(parse(source).check(), Err(Error::Cycle), "{source}");
+    }
+}
+
+#[test]
 fn reports_unchecked_fields_and_unreachable_rules() {
     let report = parse("mode: rule\ncustom: true\nrules: ['MATCH,DIRECT', 'AND,opaque']")
         .check()
