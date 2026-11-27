@@ -169,6 +169,28 @@ fn string_list(map: &Map<String, Value>, field: &str) -> Result<(), Error> {
     Ok(())
 }
 
+fn check_hosts(root: &Map<String, Value>) -> Result<(), Error> {
+    let Some(hosts) = root.get("hosts").filter(|value| !value.is_null()) else {
+        return Ok(());
+    };
+    for (host, value) in mapping(hosts, "hosts")? {
+        if host.trim().is_empty() {
+            return Err(shape("hosts.key"));
+        }
+        if let Some(values) = value.as_array() {
+            if values.is_empty() {
+                return Err(shape("hosts[]"));
+            }
+            for item in values {
+                nonempty(item, "hosts[][]")?;
+            }
+        } else {
+            nonempty(value, "hosts[]")?;
+        }
+    }
+    Ok(())
+}
+
 fn check_nameserver_policy(dns: &Map<String, Value>) -> Result<(), Error> {
     let Some(policy) = dns
         .get("nameserver-policy")
@@ -361,6 +383,7 @@ impl ConfigDocument {
             check_nameserver_policy(dns)?;
             check_fallback_filter(dns)?;
         }
+        check_hosts(root)?;
         let providers = provider_names(root, "proxy-providers")?;
         let rule_providers = provider_names(root, "rule-providers")?;
         let mut graph = BTreeMap::<&str, Vec<&str>>::new();
@@ -441,6 +464,7 @@ impl ConfigDocument {
             "tproxy-port",
             "tun",
             "dns",
+            "hosts",
             "proxies",
             "proxy-groups",
             "proxy-providers",

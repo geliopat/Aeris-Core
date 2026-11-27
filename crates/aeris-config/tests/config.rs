@@ -54,6 +54,66 @@ fn rejects_bad_types_and_ports() {
 }
 
 #[test]
+fn accepts_hosts_scalar_list_alias_and_lan_shapes_without_rewriting_source() {
+    let source = include_str!("fixtures/hosts.yaml");
+    let document = parse(source);
+    let report = document.check().expect("host mapping shape");
+    assert_eq!(report.unchecked_top_level_fields, 0);
+    assert_eq!(document.original().as_bytes(), source.as_bytes());
+}
+
+#[test]
+fn accepts_omitted_null_and_empty_hosts_mappings() {
+    for source in ["mode: rule", "hosts: null", "hosts: {}"] {
+        let document = parse(source);
+        let report = document.check().expect("optional hosts mapping");
+        assert_eq!(report.unchecked_top_level_fields, 0);
+        assert_eq!(document.original(), source);
+    }
+}
+
+#[test]
+fn rejects_invalid_hosts_shapes_without_echoing_keys_or_values() {
+    for (hosts, path) in [
+        ("['private.example']", "hosts"),
+        ("private.example", "hosts"),
+        ("{'  ': 192.0.2.1}", "hosts.key"),
+        ("{private.example: false}", "hosts[]"),
+        ("{private.example: null}", "hosts[]"),
+        ("{private.example: ''}", "hosts[]"),
+        ("{private.example: []}", "hosts[]"),
+        (
+            "{private.example: {alias: private-target.example}}",
+            "hosts[]",
+        ),
+        ("{private.example: [192.0.2.1, 53]}", "hosts[][]"),
+        ("{private.example: [null]}", "hosts[][]"),
+        ("{private.example: ['   ']}", "hosts[][]"),
+        ("{private.example: [[private-target.example]]}", "hosts[][]"),
+    ] {
+        let source = format!("hosts: {hosts}");
+        let error = parse(&source).check().expect_err("invalid hosts shape");
+        assert_eq!(error, Error::Shape(path.to_owned()));
+        assert_eq!(error.to_string(), format!("invalid structure at {path}"));
+    }
+}
+
+#[test]
+fn invalid_hosts_refresh_preserves_the_last_good_snapshot() {
+    let source = include_str!("fixtures/hosts.yaml");
+    let store = ProfileStore::new(parse(source), UserRules::default()).expect("profile store");
+    let prior = store.current().expect("current snapshot");
+    let invalid = "hosts: {private.example: []}";
+    assert!(matches!(
+        store.refresh_provider(prior.generation(), parse(invalid)),
+        Err(StoreError::Invalid(Error::Shape(path))) if path == "hosts[]"
+    ));
+    let current = store.current().expect("last good snapshot");
+    assert!(Arc::ptr_eq(&prior, &current));
+    assert_eq!(current.original(), source);
+}
+
+#[test]
 fn checks_fallback_filter_shapes_and_preserves_source() {
     let source = include_str!("fixtures/fallback-filter.yaml");
     let document = parse(source);
