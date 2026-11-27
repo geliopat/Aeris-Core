@@ -46,7 +46,9 @@ rules:
 
 ## 3. Протоколы
 
-VLESS с REALITY, Vision, XHTTP, XUDP; VMess, Trojan, SS/2022, Hysteria2, TUIC, AnyTLS, WireGuard/AmneziaWG 2.0, SOCKS5, HTTP/HTTPS, NaiveProxy (HTTP/2 и HTTP/3 по возможностям эталона). Проверить формат `network`, `tls`, `reality-opts`, `client-fingerprint`, `flow`, `xhttp-opts`, `dialer-proxy` по реальному эталону FlClashX и Xray-core. XHTTP modes auto/packet-up/stream-up/stream-one, XMUX, separate download settings и пути — не вводить несовместимый формат без документации миграции. Неподдерживаемые протоколы перечислены в SPECIFICATION.
+VLESS с REALITY, Vision, XHTTP, XUDP; VMess, Trojan, SS/2022, Hysteria2, TUIC, AnyTLS, WireGuard и актуальные и предыдущие официальные версии AmneziaWG, SOCKS5, HTTP/HTTPS, NaiveProxy (HTTP/2 и HTTP/3 по возможностям эталона). Проверить формат `network`, `tls`, `reality-opts`, `client-fingerprint`, `flow`, `xhttp-opts`, `dialer-proxy` по реальному эталону FlClashX и Xray-core. XHTTP modes auto/packet-up/stream-up/stream-one, XMUX, separate download settings и пути — не вводить несовместимый формат без документации миграции. Неподдерживаемые протоколы перечислены в SPECIFICATION.
+
+На этапе 6 зафиксировать распознавание официальных вариантов AmneziaWG, параметры обфускации каждой версии и диагностику несовместимых комбинаций. Сохранить обычный WireGuard и существующие конфигурации и подписки Mihomo, FlClashX, FlClashZ и Remnawave в пределах представимых в них параметров. Новые представления описать отдельно, без молчаливой замены протокола или параметров.
 
 ## 4. TUN и транспорт
 
@@ -66,7 +68,7 @@ System/RIPS/Mixed/Auto, Mixed TCP System + UDP RIPS, RIPS default после п�
 
 ## 7. Zapret2 и клиентские настройки
 
-Параметры самого DPI — в конфигурации ядра, точная схема TBD; не дублировать HTTP-заголовками. Режимы DIRECT-only/list-based, STRICT SPLIT/FULL BYPASS для совместимых стратегий, standalone/custom, исключения. STRICT SPLIT ограничивает обработку подходящим трафиком согласованных списков (YouTube/Discord/Google для соответствующего сценария); FULL BYPASS применяет совместимую стратегию на её перехватываемых портах, но не отменяет границу VPN-транспорта, DIRECT-NO-ZAPRET, REJECT и Kill Switch. Ultimate/custom могут определять собственные условия; UI явно показывает ограничения режима, отдельная DNS-политика, параметры таймаутов/портов, указание стратегий и списков с источниками. Не запускать произвольные BAT/CMD. Актуальные ресурсы могут обновляться отдельно после проверки.
+Параметры самого DPI — в конфигурации ядра, точная схема TBD; не дублировать HTTP-заголовками. Режимы DIRECT-only/list-based, STRICT SPLIT/FULL BYPASS для совместимых стратегий, standalone/custom, исключения. STRICT SPLIT ограничивает обработку подходящим трафиком согласованных списков (YouTube/Discord/Google для соответствующего сценария); FULL BYPASS применяет совместимую стратегию на её перехватываемых портах, но не отменяет границу VPN-транспорта, DIRECT-NO-ZAPRET, REJECT и Kill Switch. Ultimate/custom могут определять собственные условия; UI явно показывает ограничения режима, отдельная DNS-политика, параметры таймаутов/портов, указание стратегий и списков с источниками. Импортировать и обновлять проверенные стратегии Flowseal в семантике Zapret2. Устаревшие параметры и форматы Zapret1 исключены. Произвольные BAT/CMD запрещены. Совместимые списки и стратегии обновляются отдельно после проверок.
 
 Настройки GUI (тема, анимации, горячие клавиши, локализация, уведомления, автозапуск) отдельно от YAML, интерфейсный режим исключительно из профиля. Пользователь не редактирует подписку. Нет глобального экспорта/импорта всех настроек; внутренние rollback snapshots не являются пользовательской функцией бэкапа.
 

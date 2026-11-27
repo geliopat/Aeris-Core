@@ -54,6 +54,66 @@ fn rejects_bad_types_and_ports() {
 }
 
 #[test]
+fn accepts_hosts_scalar_list_alias_and_lan_shapes_without_rewriting_source() {
+    let source = include_str!("fixtures/hosts.yaml");
+    let document = parse(source);
+    let report = document.check().expect("host mapping shape");
+    assert_eq!(report.unchecked_top_level_fields, 0);
+    assert_eq!(document.original().as_bytes(), source.as_bytes());
+}
+
+#[test]
+fn accepts_omitted_null_and_empty_hosts_mappings() {
+    for source in ["mode: rule", "hosts: null", "hosts: {}"] {
+        let document = parse(source);
+        let report = document.check().expect("optional hosts mapping");
+        assert_eq!(report.unchecked_top_level_fields, 0);
+        assert_eq!(document.original(), source);
+    }
+}
+
+#[test]
+fn rejects_invalid_hosts_shapes_without_echoing_keys_or_values() {
+    for (hosts, path) in [
+        ("['private.example']", "hosts"),
+        ("private.example", "hosts"),
+        ("{'  ': 192.0.2.1}", "hosts.key"),
+        ("{private.example: false}", "hosts[]"),
+        ("{private.example: null}", "hosts[]"),
+        ("{private.example: ''}", "hosts[]"),
+        ("{private.example: []}", "hosts[]"),
+        (
+            "{private.example: {alias: private-target.example}}",
+            "hosts[]",
+        ),
+        ("{private.example: [192.0.2.1, 53]}", "hosts[][]"),
+        ("{private.example: [null]}", "hosts[][]"),
+        ("{private.example: ['   ']}", "hosts[][]"),
+        ("{private.example: [[private-target.example]]}", "hosts[][]"),
+    ] {
+        let source = format!("hosts: {hosts}");
+        let error = parse(&source).check().expect_err("invalid hosts shape");
+        assert_eq!(error, Error::Shape(path.to_owned()));
+        assert_eq!(error.to_string(), format!("invalid structure at {path}"));
+    }
+}
+
+#[test]
+fn invalid_hosts_refresh_preserves_the_last_good_snapshot() {
+    let source = include_str!("fixtures/hosts.yaml");
+    let store = ProfileStore::new(parse(source), UserRules::default()).expect("profile store");
+    let prior = store.current().expect("current snapshot");
+    let invalid = "hosts: {private.example: []}";
+    assert!(matches!(
+        store.refresh_provider(prior.generation(), parse(invalid)),
+        Err(StoreError::Invalid(Error::Shape(path))) if path == "hosts[]"
+    ));
+    let current = store.current().expect("last good snapshot");
+    assert!(Arc::ptr_eq(&prior, &current));
+    assert_eq!(current.original(), source);
+}
+
+#[test]
 fn checks_fallback_filter_shapes_and_preserves_source() {
     let source = include_str!("fixtures/fallback-filter.yaml");
     let document = parse(source);
@@ -312,6 +372,63 @@ fn duplicate_names_and_rule_references_fail() {
         "proxy-groups: [{name: A, type: select, use: [Missing]}]",
     ] {
         assert!(matches!(parse(source).check(), Err(Error::Reference(_))));
+    }
+}
+
+#[test]
+fn accepts_explicit_and_implicit_global_groups() {
+    let implicit = concat!(
+        "proxies:\n",
+        "  - {name: A, type: socks5, server: proxy.example, port: 1080, dialer-proxy: GLOBAL}\n",
+        "rules: ['MATCH,GLOBAL']",
+    );
+    let explicit = concat!(
+        "proxy-groups:\n",
+        "  - {name: A, type: select, proxies: [GLOBAL]}\n",
+        "  - {name: GLOBAL, type: select, proxies: [DIRECT]}\n",
+        "rules: ['MATCH,GLOBAL']",
+    );
+    for source in [implicit, explicit] {
+        let document = parse(source);
+        document.check().expect("valid GLOBAL group reference");
+        assert_eq!(document.original(), source);
+    }
+}
+
+#[test]
+fn rejects_implicit_global_as_a_group_member() {
+    let source = "proxy-groups: [{name: A, type: select, proxies: [GLOBAL]}]";
+    assert_eq!(
+        parse(source).check(),
+        Err(Error::Reference("proxy-groups[].proxies[]".to_owned()))
+    );
+}
+
+#[test]
+fn global_group_does_not_allow_duplicate_or_reserved_names() {
+    for source in [
+        "proxies: [{name: GLOBAL, type: socks5, server: proxy.example, port: 1080}]",
+        concat!(
+            "proxy-groups:\n",
+            "  - {name: GLOBAL, type: select, proxies: [DIRECT]}\n",
+            "  - {name: GLOBAL, type: select, proxies: [REJECT]}\n",
+        ),
+        "proxy-groups: [{name: DIRECT, type: select, proxies: [REJECT]}]",
+    ] {
+        assert_eq!(parse(source).check(), Err(Error::DuplicateName), "{source}");
+    }
+}
+
+#[test]
+fn rejects_cycles_through_an_explicit_global_group() {
+    let self_cycle = "proxy-groups: [{name: GLOBAL, type: select, proxies: [GLOBAL]}]";
+    let mutual_cycle = concat!(
+        "proxy-groups:\n",
+        "  - {name: A, type: select, proxies: [GLOBAL]}\n",
+        "  - {name: GLOBAL, type: select, proxies: [A]}\n",
+    );
+    for source in [self_cycle, mutual_cycle] {
+        assert_eq!(parse(source).check(), Err(Error::Cycle), "{source}");
     }
 }
 

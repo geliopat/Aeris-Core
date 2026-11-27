@@ -1,0 +1,10 @@
+# Synthetic host mapping with reserved test names and addresses.
+hosts:
+  Address.Example: 192.0.2.9
+  'dual.example':
+    - 192.0.2.10
+    - '2001:db8::10'
+  'scoped.example': 'fe80::a%fixture0'
+  'alias.example': target.example
+  'array-alias.example': [target.example]
+  'when-local.example': lan

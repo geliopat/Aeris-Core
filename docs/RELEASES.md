@@ -1,6 +1,6 @@
 # Release and Nightly — gates
 
-Independent versions start at 0.1.0. Release requires manual approval and all requirements in TESTING.md. Nightly requires actual implemented functionality, passing mandatory CI, and a change since its previous build; use a unique UTC date/run identifier. Never publish unsigned manifests or unsupported driver packages. Initial CI only builds/tests the scaffold; no publication, signing, or automatic release workflow is enabled. Add release automation only after signing trust roots, artifact layout, rollback and real Windows validation are established. Preview channel is excluded.
+Independent versions start at 0.1.0. Release requires manual approval and the full [Release 1.0.0 gate](TESTING.md#5-release-gate-100) and applicable core-client checks. Nightly requires actual implemented functionality, passing mandatory CI, and a change since its previous build; use a unique UTC date/run identifier. Never publish unsigned manifests or unsupported driver packages. Initial CI only builds/tests the scaffold; no publication, signing, or automatic release workflow is enabled. Add release automation only after signing trust roots, artifact layout, rollback and real Windows validation are established. Preview channel is excluded.
 
 ## Approved details / Уточнения
 

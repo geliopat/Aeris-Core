@@ -17,11 +17,25 @@
 
 Mihomo v1.19.34, resolved commit 0455d0d28c4526937380505153e65a843d8612e8, локально заменённый sing-tun v0.4.29 и MIPS pin — проверять через [FlClashX/core/go.mod](https://github.com/pluralplay/FlClashX/blob/a9bbb66f6aec3e47359819c93976148a1d270e23/core/go.mod). Не заменять эталон сборки на vanilla Mihomo. Точный текущий commit каждого транзитивного модуля проверять по исходному go.mod/go.sum/replace.
 
+## DPI и AmneziaWG
+
+На этапе 10 проверить текущие ревизии всех трёх проектов в утверждённом порядке.
+
+1. [Flowseal на Zapret2](https://github.com/Flowseal/zapret-discord-youtube) — основной технический, архитектурный и функциональный эталон после завершения перехода.
+2. [Оригинальный Zapret2](https://github.com/bol-van/zapret2) — семантика механизмов и пакетов, параметры движка и Lua API.
+3. [Zapret2-gui](https://github.com/mqclass/zapret2-gui) — совместимые стратегии, функции, автоматизация и проектные решения.
+
+По уточнению владельца, переход Flowseal на winws2 начался 2026-11-26. Если на этапе 10 он ещё не завершён, зафиксировать фактическое состояние без присвоения статуса полноценного эталона. Архитектура использует только семантику Zapret2. Ревизии выше в таблице относятся к исходному мониторингу. Ревизии реализации будут выбраны по проверкам на этапе 10.
+
+На этапе 6 сверить обычный WireGuard с [официальной спецификацией и реализациями WireGuard](https://www.wireguard.com/protocol/). Определить актуальные и предыдущие официальные варианты клиентского AmneziaWG, сверить их параметры и провести межоперационные проверки. Эталоны: [amneziawg-go](https://github.com/amnezia-vpn/amneziawg-go), [amneziawg-tools](https://github.com/amnezia-vpn/amneziawg-tools), [amneziawg-windows](https://github.com/amnezia-vpn/amneziawg-windows), [amneziawg-linux-kernel-module](https://github.com/amnezia-vpn/amneziawg-linux-kernel-module) и [amnezia-client](https://github.com/amnezia-vpn/amnezia-client). Официальные исходники определяют протокол независимо от охвата Mihomo. Ревизии реализации выбираются и фиксируются на этапе 6.
+
+Текущее обновление требований не открывает исследование этих исходников или обновление upstream. Для переноса функций, публикации ресурсов и обновлений применяются проверки лицензий, безопасности и совместимости.
+
 ## UI и заголовки
 
 Только чтение: [geliopat/FlClashZ, fix/zapret2-stability](https://github.com/geliopat/FlClashZ/tree/b279c9a7e6f37643ac23214ae180fb58ae41999d) (HEAD проверен при передаче, не означает что все файлы повторно прочитаны именно на этом SHA). Ранее изученные пути: lib/views/proxies/{list,tab,group_tabs,card,common,setting,proxies}.dart; lib/views/dashboard/provider_mode.dart и dashboard/widgets; lib/models/provider_headers.dart; lib/providers/zapret_diagnostics.dart. Найти актуальные пути при изменении структуры. FlClashZ — визуальный/функциональный эталон страниц, но поздние макеты Aeris приоритетнее. Не изменять FlClashZ.
 
-Remnawave: точную ревизию API/формата HWID и response rules закрепить при реализации подписок по реальным документации и тестовым fixtures. Zetklif: эталон конвертера, точный репозиторий/ревизия требуют проверки. Не выдумывать ссылки. Не переносить личные URL, токены, IP и реальные ключи в публичные fixtures.
+Remnawave: точную ревизию API/формата HWID и response rules закрепить при реализации подписок по реальным документации и тестовым fixtures. Не переносить личные URL, токены, IP и реальные ключи в публичные fixtures.
 
 ## Правила обновления
 

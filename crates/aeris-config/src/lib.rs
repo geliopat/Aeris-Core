@@ -13,12 +13,13 @@ pub use snapshot::{ConfigSnapshot, ProfileStore, StoreError};
 
 pub const MAX_INPUT_BYTES: usize = 16 * 1024 * 1024;
 const MAX_DECODED_SCALAR_BYTES: usize = 32 * 1024 * 1024;
+const GLOBAL_GROUP_NAME: &str = "GLOBAL";
 const BUILTINS: &[&str] = &[
     "DIRECT",
     "REJECT",
     "REJECT-DROP",
     "PASS",
-    "GLOBAL",
+    GLOBAL_GROUP_NAME,
     "ZAPRET",
     "DIRECT-NO-ZAPRET",
 ];
@@ -164,6 +165,28 @@ fn bool_field(map: &Map<String, Value>, field: &str) -> Result<(), Error> {
 fn string_list(map: &Map<String, Value>, field: &str) -> Result<(), Error> {
     for value in list(map, field)? {
         nonempty(value, field)?;
+    }
+    Ok(())
+}
+
+fn check_hosts(root: &Map<String, Value>) -> Result<(), Error> {
+    let Some(hosts) = root.get("hosts").filter(|value| !value.is_null()) else {
+        return Ok(());
+    };
+    for (host, value) in mapping(hosts, "hosts")? {
+        if host.trim().is_empty() {
+            return Err(shape("hosts.key"));
+        }
+        if let Some(values) = value.as_array() {
+            if values.is_empty() {
+                return Err(shape("hosts[]"));
+            }
+            for item in values {
+                nonempty(item, "hosts[][]")?;
+            }
+        } else {
+            nonempty(value, "hosts[]")?;
+        }
     }
     Ok(())
 }
@@ -360,6 +383,7 @@ impl ConfigDocument {
             check_nameserver_policy(dns)?;
             check_fallback_filter(dns)?;
         }
+        check_hosts(root)?;
         let providers = provider_names(root, "proxy-providers")?;
         let rule_providers = provider_names(root, "rule-providers")?;
         let mut graph = BTreeMap::<&str, Vec<&str>>::new();
@@ -380,8 +404,12 @@ impl ConfigDocument {
             if let Some(dialer) = p.get("dialer-proxy") {
                 edges.push(nonempty(dialer, "proxies[].dialer-proxy")?);
             }
+            if name == GLOBAL_GROUP_NAME {
+                return Err(Error::DuplicateName);
+            }
             add_node(&mut graph, name, edges)?;
         }
+        let mut group_references_global = false;
         for group in list(root, "proxy-groups")? {
             let g = mapping(group, "proxy-groups[]")?;
             let name = required(g, "name", "proxy-groups[].name")?;
@@ -392,7 +420,9 @@ impl ConfigDocument {
             check_group_health(g, kind)?;
             let mut edges = Vec::new();
             for member in list(g, "proxies")? {
-                edges.push(nonempty(member, "proxy-groups[].proxies[]")?);
+                let member = nonempty(member, "proxy-groups[].proxies[]")?;
+                group_references_global |= member == GLOBAL_GROUP_NAME;
+                edges.push(member);
             }
             for provider in list(g, "use")? {
                 let name = nonempty(provider, "proxy-groups[].use[]")?;
@@ -401,6 +431,10 @@ impl ConfigDocument {
                 }
             }
             add_node(&mut graph, name, edges)?;
+        }
+        // The implicit GLOBAL group is created after other groups resolve their members.
+        if group_references_global && !graph.contains_key(GLOBAL_GROUP_NAME) {
+            return Err(Error::Reference("proxy-groups[].proxies[]".to_owned()));
         }
         check_graph(&graph)?;
         let mut matched = false;
@@ -430,6 +464,7 @@ impl ConfigDocument {
             "tproxy-port",
             "tun",
             "dns",
+            "hosts",
             "proxies",
             "proxy-groups",
             "proxy-providers",
@@ -538,7 +573,8 @@ fn add_node<'a>(
     name: &'a str,
     edges: Vec<&'a str>,
 ) -> Result<(), Error> {
-    if BUILTINS.contains(&name) || graph.insert(name, edges).is_some() {
+    let reserved = name != GLOBAL_GROUP_NAME && BUILTINS.contains(&name);
+    if reserved || graph.insert(name, edges).is_some() {
         return Err(Error::DuplicateName);
     }
     Ok(())

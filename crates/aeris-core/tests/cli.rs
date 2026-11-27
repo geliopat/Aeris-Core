@@ -14,6 +14,20 @@ fn version_is_reported() {
 }
 
 #[test]
+fn help_describes_the_config_subcommands() {
+    let output = Command::new(env!("CARGO_BIN_EXE_aeris-core"))
+        .arg("help")
+        .output()
+        .expect("run CLI");
+    assert!(output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .any(|line| line.trim() == "aeris config <check|test> FILE")
+    );
+}
+
+#[test]
 fn unsupported_command_fails() {
     let output = Command::new(env!("CARGO_BIN_EXE_aeris-core"))
         .args(["vpn", "start"])
