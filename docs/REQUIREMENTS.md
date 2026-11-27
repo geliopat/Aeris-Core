@@ -64,6 +64,12 @@
 | REL-01 | 3 repos, independent versions, unique IDs, Inno Setup install/portable/core ZIP, no FlClashZ damage | SPECIFICATION §2 |
 | REL-02 | Release/Nightly only, signed manifests, 24h check, changed-only downloads, compatible rollback and switch to Release | RELEASES, SPECIFICATION §8 |
 | REL-03 | Exact upstream tracking schedules, reviewed ports, licensed resources, separate updates | UPSTREAM, ROADMAP |
+| CI-01 | Бесплатные standard GitHub-hosted runners, Windows x64 для сборки, раздельные репозитории и прежняя архитектура | ARCHITECTURE §10 |
+| CI-02 | FAST по умолчанию, FULL и CLEAN вручную. Все обязательные проверки в каждом режиме, стабильный Release из CLEAN | RELEASES; TESTING |
+| CI-03 | Раздельные ограниченные кэши зависимостей и компиляции, sccache для Rust без дублирования target, закреплённые версии | ARCHITECTURE §10; холодный и повторный прогон |
+| CI-04 | Независимое переиспользование по точным входам и зависимостям, проверяемые межрепозиторные артефакты, упаковка тех же проверенных байтов | ARCHITECTURE §10; TESTING |
+| CI-05 | Границы доверия, отсутствие секретов в кэше, целостность, подписи и изолированные привилегии, лимиты и безопасное вытеснение | ARCHITECTURE §10; security review |
+| CI-06 | Summary с режимом, попаданиями/промахами, причинами и компонентами, версиями, объёмом, sccache и временем этапов. Ускорение по измерениям | TESTING; STATUS |
 | QA-01 | fmt/Clippy/Roslyn/tests/Audit/Deny/fuzz/security, reviewed stable dependencies, no placeholders | TESTING §1–2, AGENTS |
 | QA-02 | Windows 10/11 actual systems, Intel/AMD, install/portable, antivirus/anticheat, driver/network recovery | TESTING §2–3 |
 | QA-03 | Same-condition comparative benchmarks, CPU/RAM/latency/throughput/connection/24h/72h/leak | TESTING §4 |

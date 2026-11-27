@@ -28,6 +28,8 @@
 6. Подготовить проверяемый diff/PR, provenance, ограничения. Не сливать при fail обязательных тестах.
 7. Создавать/изменять репозитории, запускать сборку, публиковать Release и менять инфраструктуру только в рамках полученного разрешения. Не запускать сборки в ответ на обсуждение дизайна или подтверждение пункта ТЗ.
 
+CI/CD ведёт DevOps по [архитектуре](docs/ARCHITECTURE.md#10-cicd-и-переиспользование-компонентов) и режимам [FAST, FULL и CLEAN](docs/RELEASES.md). Использовать доступные бесплатные hosted runners. Сохранять обязательные проверки, границы доверия и подтверждать ускорение измерениями.
+
 ## 4. Качество и безопасность
 
 Rustfmt/Clippy/Cargo Test/Audit/Deny, Roslyn/dotnet format, unit/integration/fuzz. Асинхронность, bounded queues, cancellation, typed errors. Минимальные права, IPC ACL, явные capabilities, подписанные манифесты с доверенными ключами, хэши, atomic replace, path validation, архивы без traversal. Никаких случайных privileged shell scripts. Lua sandbox/изоляция по threat model, проверка лицензий/подписей ресурсов. Секреты DPAPI/redaction; нет автоматической отправки логов.

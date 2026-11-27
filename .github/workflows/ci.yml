@@ -3,44 +3,139 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: Build mode
+        type: choice
+        options: [FAST, FULL, CLEAN]
+        default: FAST
+        required: true
 permissions:
   contents: read
 concurrency:
-  group: core-ci-${{ github.ref }}
+  group: core-ci-${{ github.ref }}-${{ github.event_name }}-${{ inputs.mode || 'FAST' }}
   cancel-in-progress: true
 jobs:
   windows:
     runs-on: windows-2022
+    env:
+      BUILD_MODE: ${{ inputs.mode || 'FAST' }}
+      CARGO_INCREMENTAL: '0'
+      SCCACHE_CACHE_SIZE: 256M
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-          targets: x86_64-pc-windows-msvc
-      - uses: Swatinem/rust-cache@v2.9.3
-      - name: Check minimum supported Rust
-        run: |
-          $package = (cargo metadata --no-deps --format-version 1 --locked | ConvertFrom-Json).packages | Where-Object name -eq 'aeris-core'
-          $minimum = $package.rust_version
-          rustup toolchain install $minimum --profile minimal
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cargo "+$minimum" check --workspace --all-targets --locked
-      - run: cargo fmt --all -- --check
-      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
-      - run: cargo test --workspace --locked
-      - run: cargo build --workspace --release --locked --target x86_64-pc-windows-msvc
-      - name: CLI wrapper smoke test
+      - name: Start timing
         shell: pwsh
         run: |
-          $root = Join-Path $env:RUNNER_TEMP 'aeris-smoke'
-          New-Item -ItemType Directory -Force (Join-Path $root 'cli') | Out-Null
-          Copy-Item target/x86_64-pc-windows-msvc/release/aeris-core.exe $root
-          Copy-Item cli/aeris.cmd (Join-Path $root 'cli')
-          $env:PATH = (Join-Path $root 'cli') + ';' + $env:PATH
-          Push-Location $env:RUNNER_TEMP
-          try {
-            $expected = & (Join-Path $root 'aeris-core.exe') version
-            if ($LASTEXITCODE -ne 0 -or $expected -notmatch '^Aeris Core \S+$') { throw 'Core version check failed' }
-            $result = aeris version
-            if ($LASTEXITCODE -ne 0 -or $result -ne $expected) { throw 'CLI smoke test failed' }
-          } finally { Pop-Location }
+          "SCCACHE_DIR=$env:RUNNER_TEMP\aeris-sccache" >> $env:GITHUB_ENV
+          "CI_START=$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())" >> $env:GITHUB_ENV
+          if ($env:BUILD_MODE -eq 'CLEAN') {
+            "CARGO_HOME=$env:RUNNER_TEMP\aeris-cargo-clean" >> $env:GITHUB_ENV
+          } elseif (-not $env:CARGO_HOME) {
+            "CARGO_HOME=$env:USERPROFILE\.cargo" >> $env:GITHUB_ENV
+          }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Read the pinned Rust version
+        id: rust-spec
+        shell: pwsh
+        run: |
+          $channel = Select-String -LiteralPath rust-toolchain.toml -Pattern '^channel = "(\d+\.\d+\.\d+)"$'
+          if (-not $channel) { throw 'The Rust toolchain must be an exact version.' }
+          "version=$($channel.Matches[0].Groups[1].Value)" >> $env:GITHUB_OUTPUT
+      - name: Install Rust
+        id: rust
+        uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca
+        with:
+          toolchain: ${{ steps.rust-spec.outputs.version }}
+          components: rustfmt, clippy
+          targets: x86_64-pc-windows-msvc
+      - name: Restore Cargo download cache
+        id: cargo-cache
+        if: env.BUILD_MODE != 'CLEAN'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/cache
+          key: cargo-download-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
+      - name: Install sccache
+        if: env.BUILD_MODE == 'FAST'
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+        with:
+          version: v0.16.0
+          disable_annotations: true
+      - name: Verify sccache executable
+        if: env.BUILD_MODE == 'FAST'
+        shell: pwsh
+        run: |
+          $expected = '9209ba7cc02278065b6795484228d8dda7125dd72f4a682a215fde0c195a4e0b'
+          $actual = (Get-FileHash -Algorithm SHA256 (Get-Command sccache).Source).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw 'sccache executable SHA256 mismatch' }
+      - name: Restore sccache
+        id: sccache
+        if: env.BUILD_MODE == 'FAST'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}\aeris-sccache
+          key: sccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust.outputs.cachekey }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml', '.github/workflows/ci.yml') }}-${{ hashFiles('crates/**', 'Cargo.toml') }}
+          restore-keys: |
+            sccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust.outputs.cachekey }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml', '.github/workflows/ci.yml') }}-
+      - name: Enable sccache
+        if: env.BUILD_MODE == 'FAST'
+        shell: pwsh
+        run: |
+          'RUSTC_WRAPPER=sccache' >> $env:GITHUB_ENV
+      - name: Validate and build
+        shell: pwsh
+        env:
+          ACTIONS_RUNTIME_TOKEN: ''
+          ACTIONS_RESULTS_URL: ''
+          CARGO_CACHE_HIT: ${{ steps.cargo-cache.outputs.cache-hit }}
+          SCCACHE_HIT: ${{ steps.sccache.outputs.cache-hit }}
+        run: ./.github/scripts/core-ci.ps1
+      - name: Measure cache sizes
+        id: cache-size
+        if: success() && env.BUILD_MODE != 'CLEAN'
+        shell: pwsh
+        run: |
+          $cargoPath = Join-Path $env:CARGO_HOME 'registry\cache'
+          $bytes = 0
+          if (Test-Path $cargoPath) {
+            $bytes = (Get-ChildItem -LiteralPath $cargoPath -File -Recurse | Measure-Object Length -Sum).Sum
+          }
+          "cargo_bytes=$bytes" >> $env:GITHUB_OUTPUT
+          "cargo_save=$($bytes -gt 0 -and $bytes -le 268435456)" >> $env:GITHUB_OUTPUT
+          $sccacheBytes = 0
+          if (Test-Path $env:SCCACHE_DIR) {
+            $sccacheBytes = (Get-ChildItem -LiteralPath $env:SCCACHE_DIR -File -Recurse | Measure-Object Length -Sum).Sum
+          }
+          "sccache_bytes=$sccacheBytes" >> $env:GITHUB_OUTPUT
+          "sccache_save=$($sccacheBytes -gt 0 -and $sccacheBytes -le 268435456)" >> $env:GITHUB_OUTPUT
+      - name: Save Cargo download cache from trusted main
+        if: success() && env.BUILD_MODE != 'CLEAN' && steps.cargo-cache.outputs.cache-hit != 'true' && steps.cache-size.outputs.cargo_save == 'True' && github.repository == 'geliopat/Aeris-Core' && github.ref_protected && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/cache
+          key: ${{ steps.cargo-cache.outputs.cache-primary-key }}
+      - name: Save sccache from trusted main
+        if: success() && env.BUILD_MODE == 'FAST' && steps.sccache.outputs.cache-hit != 'true' && steps.cache-size.outputs.sccache_save == 'True' && github.repository == 'geliopat/Aeris-Core' && github.ref_protected && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}\aeris-sccache
+          key: ${{ steps.sccache.outputs.cache-primary-key }}
+
+
+      - name: Finish summary
+        if: always()
+        shell: pwsh
+        env:
+          CARGO_BYTES: ${{ steps.cache-size.outputs.cargo_bytes }}
+          SCCACHE_BYTES: ${{ steps.cache-size.outputs.sccache_bytes }}
+        run: |
+          if ($env:CI_START) {
+            $elapsed = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() - [long]$env:CI_START
+            "- Job elapsed through cache saves: $elapsed s" >> $env:GITHUB_STEP_SUMMARY
+          }
+          "- Cargo cache bytes: $env:CARGO_BYTES; sccache bytes: $env:SCCACHE_BYTES" >> $env:GITHUB_STEP_SUMMARY
+          '- Cache usage is subject to repository quota and eviction; inspect Actions cache storage for aggregate usage.' >> $env:GITHUB_STEP_SUMMARY
