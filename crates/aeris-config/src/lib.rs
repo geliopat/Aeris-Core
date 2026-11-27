@@ -168,6 +168,28 @@ fn string_list(map: &Map<String, Value>, field: &str) -> Result<(), Error> {
     Ok(())
 }
 
+fn check_nameserver_policy(dns: &Map<String, Value>) -> Result<(), Error> {
+    let Some(policy) = dns
+        .get("nameserver-policy")
+        .filter(|value| !value.is_null())
+    else {
+        return Ok(());
+    };
+    for (selector, value) in mapping(policy, "dns.nameserver-policy")? {
+        if selector.trim().is_empty() {
+            return Err(shape("dns.nameserver-policy.key"));
+        }
+        if let Some(resolvers) = value.as_array() {
+            for resolver in resolvers {
+                nonempty(resolver, "dns.nameserver-policy[][]")?;
+            }
+        } else {
+            nonempty(value, "dns.nameserver-policy[]")?;
+        }
+    }
+    Ok(())
+}
+
 fn port(value: &Value, path: &str, allow_zero: bool) -> Result<(), Error> {
     let min = u64::from(!allow_zero);
     if value.as_u64().is_none_or(|n| !(min..=65_535).contains(&n)) {
@@ -288,6 +310,7 @@ impl ConfigDocument {
             ] {
                 string_list(dns, field)?;
             }
+            check_nameserver_policy(dns)?;
         }
         let providers = provider_names(root, "proxy-providers")?;
         let rule_providers = provider_names(root, "rule-providers")?;

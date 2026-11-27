@@ -1,0 +1,19 @@
+# Independently written fixture for scalar and list policy values.
+dns:
+  enable: true
+  nameserver-policy:
+    'rule-set:OfficeRules': 'https://routed.example/dns-query#ExampleRoute'
+    'GeoSite:category-local,private':
+      - 'tls://primary.example#ExampleRoute'
+      - https://secondary.example/dns-query
+    '+.services.example': 'https://wildcard.example/dns-query#ExampleRoute'
+    single.example: https://single.example/dns-query
+proxy-groups:
+  - name: ExampleRoute
+    type: select
+    proxies: [DIRECT]
+rule-providers:
+  OfficeRules:
+    type: http
+    behavior: domain
+    url: https://rules.example/domain.yaml
