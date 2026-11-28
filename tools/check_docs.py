@@ -47,6 +47,7 @@ def anchors(text):
 
 
 def validate(root):
+    root = root.resolve()
     docs = root / "docs"
     files = {path: path.read_text(encoding="utf-8") for path in docs.glob("*.md")}
     instructions = root / "AGENTS.md"

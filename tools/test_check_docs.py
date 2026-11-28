@@ -25,6 +25,9 @@ class CanonicalDocumentChecks(TestCase):
     def test_valid_links_and_archived_wording(self):
         self.assertEqual(validate(self.root), [])
 
+    def test_noncanonical_root_is_resolved_before_comparing_paths(self):
+        self.assertEqual(validate(self.docs / '..'), [])
+
     def test_unresolved_heading_and_unknown_requirement(self):
         self.write(self.docs / "ARCHITECTURE.md", "[Missing](DECISIONS.md#absent)\n| CORE-99 | typo |")
         errors = "\n".join(validate(self.root))
