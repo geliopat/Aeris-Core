@@ -4,10 +4,10 @@
 
 | ID | Обязательный результат | Источник / проверка |
 |---|---|---|
-| CORE-01 | Один Rust core, независимые жизненные циклы VPN/DPI/DNS; GUI и служба отдельно | SPECIFICATION §3–4, ARCHITECTURE §1–2; lifecycle tests |
-| CORE-02 | FlClashX Mihomo assembly reference, Xray и иерархия DPI/AWG из UPSTREAM. Ядро нативное | UPSTREAM, COMPATIBILITY; provenance |
-| CORE-03 | TCP/UDP IPv4/IPv6, Tokio, отмена, bounded queues, deadlines, backpressure, connection lifecycle | ARCHITECTURE §3; loopback/load/cancel |
-| CORE-04 | rustls, fingerprint profiles, verified crypto, signed TLS data and rollback | ARCHITECTURE §2; interop/resource tests |
+| CORE-01 | Самостоятельное нативное Rust-ядро в одном основном процессе, независимый lifecycle VPN/DPI/DNS, отдельные WinUI 3 GUI и служба. Границы нативности и утверждённые исключения по SPECIFICATION | SPECIFICATION §3–4, ARCHITECTURE §1–2; lifecycle tests |
+| CORE-02 | Сборка Mihomo из FlClashX и специализированные эталоны Xray, WireGuard/AmneziaWG и DPI определяют функциональную совместимость. Внутренние реализации выбираются по D-26 | UPSTREAM, COMPATIBILITY; provenance |
+| CORE-03 | TCP/UDP IPv4/IPv6, отмена, bounded queues, deadlines, backpressure, connection lifecycle. Runtime выбирается по D-26 | ARCHITECTURE §3; loopback/load/cancel |
+| CORE-04 | TLS с проверкой сертификатов, профили отпечатков, REALITY, проверенная криптография, подписанные TLS-данные и откат. Компоненты выбираются по D-26 | ARCHITECTURE §2; interop/resource tests |
 | PROTO-01 | VLESS REALITY/Vision/XHTTP/XUDP, все 4 XHTTP mode, XMUX, separate paths/settings | SPECIFICATION §3; Xray interop |
 | PROTO-02 | VMess, Trojan, SS/2022, Hysteria2, TUIC, AnyTLS | COMPATIBILITY; оригинальные серверы |
 | PROTO-03 | Обычный WireGuard и общая реализация актуальных и предыдущих официальных AmneziaWG, включая версии/обфускацию и явную диагностику. SOCKS5, HTTP/HTTPS, NaiveProxy H2/H3 в поддерживаемых режимах | COMPATIBILITY; interop |
@@ -18,7 +18,7 @@
 | DNS-01 | UDP/TCP, DoH H1/H2/H3, DoT, DoQ, optional DNSSEC, explicit system only | ARCHITECTURE §4; leak/interop |
 | DNS-02 | Policies, groups, hosts, #route, bootstrap, respect-rules, configured fallback, distinct DPI DNS | CONFIGURATION §5; routing/leak |
 | DNS-03 | Fake-IP v4/v6, Redir-Host/Hybrid, stable mapping and exclusions, no fake outward | ARCHITECTURE §4; mapping/reload |
-| DNS-04 | TTL/negative/prefetch/stale/coalescing/cache persistence, independent clear, benchmark choice | ARCHITECTURE §4; cache/bench |
+| DNS-04 | TTL/negative/prefetch/stale/coalescing, независимые кэши и очистка, опциональная персистентность. По D-26 сравниваются внутренние алгоритмы при сохранении этих свойств | ARCHITECTURE §4; cache/bench |
 | DNS-05 | DNS Always On/Proxy Access, DNS Kill Switch, UDP/TCP53 hijack v4/v6, optional encrypted endpoint block without MITM | CONFIGURATION §5; policy/leak |
 | DNS-06 | TLS verification/pin optional/ECS/stamps/rebinding; pools, racing, recovery, per-module address family | ARCHITECTURE §4; security/bench |
 | DNS-07 | Sniff HTTP Host/TLS SNI/QUIC without decrypt, ECH limitation; Happy Eyeballs/NAT64/DNS64 | ARCHITECTURE §3–4; tests |
@@ -26,10 +26,10 @@
 | ROUTE-02 | DIRECT/proxy/REJECT/REJECT-DROP/PASS/ZAPRET/DIRECT-NO-ZAPRET, routing modes, no silent fallback | CONFIGURATION §6; policy |
 | ROUTE-03 | select/url-test/fallback/load-balance/smart/adaptive; weights/sticky/health/dedup; gaming/streaming policy | ARCHITECTURE §5; tests/bench |
 | ROUTE-04 | MRS/MMDB/GeoIP/GeoSite/providers, source/cache/update/rollback; dialer-proxy chains | CONFIGURATION §6; fixtures |
-| ROUTE-05 | Live connection metrics/control, preserve active route, simulation/conflicts/hits, optimized ordered indexes | ARCHITECTURE §5; tests/bench |
-| TUN-01 | System/RIPS/Mixed/Auto, supported TCP/UDP/ICMP IPv4/v6, CUBIC/BBR3 after validation | SPECIFICATION §4; real Windows |
+| ROUTE-05 | Live connection metrics/control, preserve active route, simulation/conflicts/hits, сохранение первого совпадения при оптимизациях индексации | ARCHITECTURE §5; tests/bench |
+| TUN-01 | System/RIPS/Mixed/Auto, нативный пользовательский Rust-стек RIPS, Mixed TCP System и UDP RIPS. TCP/UDP/ICMP IPv4/v6 и CUBIC/BBR3 по проверкам. Сравнение с MIPS обязательно на этапе 9 | SPECIFICATION §4; real Windows |
 | TUN-02 | Wintun, routes, independent TUN/DPI/core exclusions, WFP Kill Switch off/proxy-only/strict/persistent | ARCHITECTURE §3,5; driver/leak |
-| DPI-01 | Нативный Rust по семантике Zapret2, Lua через mlua, независимый standalone, DIRECT-only, явные режимы/исключения, защита от повторного перехвата и петель | ARCHITECTURE §6; original comparison |
+| DPI-01 | Нативный Rust по семантике Zapret2, совместимый Lua API с проверенной изоляцией, независимый standalone, DIRECT-only, явные режимы/исключения, защита от повторного перехвата и петель | ARCHITECTURE §6; original comparison |
 | DPI-02 | Актуальные проверенные стратегии Flowseal на Zapret2, импорт и обновление, original/Ultimate/custom, диагностика, без исполнения BAT/CMD и наследия Zapret1 | ARCHITECTURE §6; fixtures |
 | DPI-03 | Include/exclude/auto lists, user/provider sources, provenance/conflicts, atomic update, exclusions first | ARCHITECTURE §6; tests |
 | DPI-04 | Quick/standard/extended/custom autoselect, history, manual apply default, four HTTPS probes, configurable tests | ARCHITECTURE §6; integration |
@@ -41,7 +41,7 @@
 | SYS-03 | LocalAppData/portable/ProgramData boundaries, DPAPI, atomic settings/history; no total backup | ARCHITECTURE §7; persistence |
 | OBS-01 | Separate logs/metrics, limits/defaults/redaction, nonblocking buffers, history opt-in, scrubbed export | ARCHITECTURE §7, DEFAULTS |
 | OBS-02 | Diagnostics manual target/direct/VPN/DNS/leaks, component status, no auto repair | UI-SPECIFICATION §4; tests |
-| UI-01 | WinUI3 native MVVM, no network in GUI, two profile-driven modes, fixed widgets, IP/announce policy | UI-SPECIFICATION §1–3 |
+| UI-01 | Нативный C#/WinUI 3, отсутствие сетевой логики в GUI, two profile-driven modes, fixed widgets, IP/announce policy | UI-SPECIFICATION §1–3 |
 | UI-02 | Simple dashboard exact order/cards, separate VPN/DPI controls, profile refresh, full-page navigation | UI-SPECIFICATION §2 |
 | UI-03 | Full dashboard six separate cards and exact sidebar/footer layout, no duplicate diagnostics/about nav | UI-SPECIFICATION §3 |
 | UI-04 | Proxies list/tab, layouts/cards/sort/icons, groups/selection/pinning/latency/dedup, adaptive columns | UI-SPECIFICATION §4 |
@@ -61,12 +61,12 @@
 | SEC-02 | Lua capability/limits, signed trusted resources, path/argument/archive validation, source licenses | ARCHITECTURE §6–8; tests |
 | EXT-01 | Слабая связанность GUI/ядра/служб, версионируемые внутренние IPC/контракты, раздельные права и обновления, независимый базовый клиент, без затрат на критическом сетевом пути | ARCHITECTURE §9; архитектурное и системное ревью |
 | EXT-02 | Отложено до стабилизации. Универсальные расширения, Plugin Manager/API/SDK, каталоги и пакеты, подписи, разрешения, изоляция, управление жизненным циклом, откат, безопасный режим и инструменты. Конкретные модули отдельно согласуются | ROADMAP; отложенные проверки TESTING |
-| REL-01 | 3 repos, independent versions, unique IDs, Inno Setup install/portable/core ZIP, no FlClashZ damage | SPECIFICATION §2 |
+| REL-01 | 3 repos, independent versions, unique IDs, install/portable/core ZIP, no FlClashZ damage | SPECIFICATION §2 |
 | REL-02 | Release/Nightly only, signed manifests, 24h check, changed-only downloads, compatible rollback and switch to Release | RELEASES, SPECIFICATION §8 |
-| REL-03 | Exact upstream tracking schedules, reviewed ports, licensed resources, separate updates | UPSTREAM, ROADMAP |
+| REL-03 | Сохранение интервалов эталонов, раздельный учёт наблюдения, исследования и утверждения upstream, review портов, лицензии ресурсов и отдельные обновления | UPSTREAM, ROADMAP |
 | CI-01 | Бесплатные standard GitHub-hosted runners, Windows x64 для сборки, раздельные репозитории и прежняя архитектура | ARCHITECTURE §10 |
 | CI-02 | FAST по умолчанию, FULL и CLEAN вручную. Все обязательные проверки в каждом режиме, стабильный Release из CLEAN | RELEASES; TESTING |
-| CI-03 | Раздельные ограниченные кэши зависимостей и компиляции, sccache для Rust без дублирования target, закреплённые версии | ARCHITECTURE §10; холодный и повторный прогон |
+| CI-03 | Раздельные ограниченные кэши зависимостей и компиляции, кэширование компиляции Rust без дублирования target, текущий инструмент sccache, закреплённые версии | ARCHITECTURE §10; холодный и повторный прогон |
 | CI-04 | Независимое переиспользование по точным входам и зависимостям, проверяемые межрепозиторные артефакты, упаковка тех же проверенных байтов | ARCHITECTURE §10; TESTING |
 | CI-05 | Границы доверия, отсутствие секретов в кэше, целостность, подписи и изолированные привилегии, лимиты и безопасное вытеснение | ARCHITECTURE §10; security review |
 | CI-06 | Summary с режимом, попаданиями/промахами, причинами и компонентами, версиями, объёмом, sccache и временем этапов. Ускорение по измерениям | TESTING; STATUS |

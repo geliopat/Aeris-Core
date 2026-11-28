@@ -36,6 +36,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Check canonical documentation and monitor tooling
+        run: |
+          python -B tools/check_docs.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -B -m unittest discover -s tools -p 'test_*.py'
       - name: Read the pinned Rust version
         id: rust-spec
         shell: pwsh

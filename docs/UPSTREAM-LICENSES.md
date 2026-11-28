@@ -6,12 +6,12 @@ Checked repository metadata and reference commits on 2026-11-26. These are revie
 |---|---|---|---|
 | [XTLS/Xray-core](https://github.com/XTLS/Xray-core) | main | MPL-2.0 | XHTTP, XUDP, REALITY, Vision |
 | [pluralplay/FlClashX](https://github.com/pluralplay/FlClashX) | main | GPL-3.0 | Authoritative Mihomo assembly / UI reference |
-| [MetaCubeX/mipstack](https://github.com/MetaCubeX/mipstack) | master | MPL-2.0 | RIPS reference; assembly pin 9a80a07eaeb9404d5bf416288e989ba7f947c899 |
+| [MetaCubeX/mipstack](https://github.com/MetaCubeX/mipstack) | master | MPL-2.0 | RIPS comparison candidate at stage 9; assembly pin 9a80a07eaeb9404d5bf416288e989ba7f947c899 |
 | [bol-van/zapret2](https://github.com/bol-van/zapret2) | master | unverified | DPI and Lua semantics |
 | [Flowseal/zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube) | main | NOASSERTION | Strategy/list reference |
 | [mqclass/zapret2-gui](https://github.com/mqclass/zapret2-gui) | main | MIT | Strategy catalog |
 | [refraction-networking/utls](https://github.com/refraction-networking/utls) | master | BSD-3-Clause | TLS fingerprint reference |
-| [rustls/rustls](https://github.com/rustls/rustls) | main | NOASSERTION | TLS library |
+| [rustls/rustls](https://github.com/rustls/rustls) | main | NOASSERTION | TLS implementation candidate |
 | [WireGuard/wintun](https://github.com/WireGuard/wintun) | master | NOASSERTION | Driver |
 | [basil00/WinDivert](https://github.com/basil00/WinDivert) | master | NOASSERTION | Driver |
 
@@ -35,3 +35,7 @@ Read at the recorded revisions, not inferred from GitHub license metadata:
 Preliminary project-license candidate: GPL-3.0 for Aeris and Aeris-Core if compatible with all adapted source and chosen driver distribution terms. The client and core are separate works with a documented IPC boundary; no license assignment is made in this change. Resource repository requires per-artifact licenses (lists and geodata may differ). This is not a completed legal audit; review the exact source files and actual distributable binaries before publishing. No upstream code or drivers have been copied.
 
 При достижении этапов 6 и 10 проверить лицензии конкретных ревизий официальных AmneziaWG и трёх эталонов DPI из [UPSTREAM.md](UPSTREAM.md). Для заимствований и распространяемых стратегий, Lua, списков и драйверных компонентов отдельно зафиксировать точное происхождение, разрешение на использование и распространение, обязательные уведомления и подтверждённую совместимость. Приведённые выше лицензии относятся к указанным ревизиям.
+
+## Регистрация кандидатов D-26
+
+У семи новых источников из [UPSTREAM](UPSTREAM.md#кандидаты-на-исследование) подтверждены исходные репозитории и ветки. Лицензии исходного текста и зависимостей, исключения по файлам, условия переноса и распространения и SHA для принятия остаются в статусе pending. Копии владельца не предоставляют дополнительных прав. До использования зафиксировать отдельный результат для конкретной ревизии по [DEPENDENCY-POLICY](DEPENDENCY-POLICY.md). Действующие лицензии и исторические проверки выше относятся к указанным ревизиям.
